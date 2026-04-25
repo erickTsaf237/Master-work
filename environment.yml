@@ -1,0 +1,15 @@
+name: access-explainer
+
+channels:
+  - pytorch
+  - conda-forge
+
+dependencies:
+  - python=3.11
+  - pytorch
+  - cpuonly
+  - pip
+  - pip:
+      - numpy>=1.22
+      - pandas>=2.0
+      - scikit-learn>=1.2
