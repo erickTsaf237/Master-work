@@ -1,0 +1,290 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{bm}
+\usepackage{mathtools}
+\usepackage{geometry}
+\usepackage{hyperref}
+\geometry{margin=2.5cm}
+
+\title{Formalisation mathematique d'un modele hybride\\HyConEx--HyperLogic}
+\author{Projet de recherche}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Ce document formalise mathematiquement une architecture hybride combinant
+l'approche contrefactuelle de HyConEx et l'approche de generation de regles de type HyperLogic.
+L'objectif est d'unifier:
+(i) une tete de prediction interpretable par regles,
+(ii) une tete de generation de contrefactuels,
+et (iii) un hyperreseau generateur de poids.
+Nous definissons les notations, les equations de passage avant, la fonction de cout multi-objectifs,
+et les criteres d'evaluation.
+\end{abstract}
+
+\section{Notations}
+Soit un jeu de donnees supervises:
+\[
+\mathcal{D}=\{(\bm{x}_i,y_i)\}_{i=1}^N,\quad
+\bm{x}_i\in\mathbb{R}^{d},\quad
+y_i\in\{1,\dots,C\}.
+\]
+
+On note:
+\begin{itemize}
+    \item $B(\cdot)$ l'operateur de binarisation/discretisation;
+    \item $\bm{x}^{(b)}=B(\bm{x})\in\{0,1\}^{D_b}$ la representation binaire;
+    \item $\bm{t}\in\{1,\dots,C\}$ une classe cible contrefactuelle, $\bm{t}\neq y$;
+    \item $\mathcal{H}_\phi$ l'hyperreseau de parametres $\phi$;
+    \item $W_m$ les poids du main network (tete regles), $W_{cf}$ ceux de la tete CF.
+\end{itemize}
+
+\section{Structure hybride HyConEx--HyperLogic}
+\subsection{Hyperreseau}
+Dans l'hybride, les poids des deux tetes sont produits par un hyperreseau:
+\[
+(W_m,W_{cf})=\mathcal{H}_\phi(\bm{s}),
+\]
+ou $\bm{s}$ est un vecteur de contexte (par exemple statistiques de batch de $\bm{x}^{(b)}$:
+moyenne, variance, quantiles, etc.).
+
+Contrairement a une fusion de type $\alpha W_{hyper}+(1-\alpha)W_{base}$,
+on considere ici la forme \emph{full generated}:
+\[
+W_m=W_m^{hyper},\qquad W_{cf}=W_{cf}^{hyper}.
+\]
+
+\subsection{Main network de regles}
+Le main network est une fonction differentiable:
+\[
+\bm{z}=f_m(\bm{x}^{(b)};W_m),\qquad
+\hat{\bm{p}}=\text{softmax}(\bm{z})\in[0,1]^C.
+\]
+La prediction est:
+\[
+\hat{y}=\arg\max_{c\in\{1,\dots,C\}} \hat{p}_c.
+\]
+
+Interpretation regles:
+les neurones caches representent des clauses candidates et la couche de sortie agrège ces clauses.
+Les litteraux sont derives des poids de $W_m$ et des variables binaires de $\bm{x}^{(b)}$.
+
+\paragraph{Formalisation explicite de la tete regles}
+Une ecriture compacte de type DR-like est:
+\begin{align}
+\bm{h} &= \sigma\!\left((\bm{x}^{(b)})^\top W_r + \bm{b}_r\right),\quad \bm{h}\in\mathbb{R}^{K},\\
+\bm{z} &= \bm{h}^\top W_o + \bm{b}_o,\quad \bm{z}\in\mathbb{R}^{C},
+\end{align}
+avec:
+\[
+W_m=\{W_r,\bm{b}_r,W_o,\bm{b}_o\},
+\]
+ou $K$ est le nombre de neurones-regles, $W_r\in\mathbb{R}^{D_b\times K}$, $W_o\in\mathbb{R}^{K\times C}$.
+La fonction $\sigma$ est typiquement une approximation differentiable d'une logique de conjonction
+(ex. sigmoide temperaturee).
+
+Pour un neurone-regle $k$, les conditions ON/OFF sont lues depuis la colonne $W_r[:,k]$:
+un poids positif favorise l'activation du bit, un poids negatif favorise sa desactivation.
+
+\paragraph{Lien direct avec la formulation HyperLogic (niveau neurone-regle)}
+Dans HyperLogic/DR-Net, la sortie logique d'une regle $k$ est idealement definie par une indicatrice:
+\begin{equation}
+o_k
+=\mathbf{1}\!\left\{
+\sum_{d=1}^{D_b} w_{d,k}x^{(b)}_d-\sum_{d=1}^{D_b}|w_{d,k}|=0
+\right\},
+\label{eq:ok_indicator}
+\end{equation}
+ou $x^{(b)}_d$ est la composante binaire et $w_{d,k}$ le poids associe.
+L'equation \eqref{eq:ok_indicator} encode l'idee ``tous les litteraux requis par la regle sont satisfaits''.
+
+Comme \eqref{eq:ok_indicator} est non differentiable, on utilise une approximation lisse:
+\begin{equation}
+o_k \approx h(u_k),
+\quad
+u_k=\sum_{d=1}^{D_b} w_{d,k}x^{(b)}_d-\sum_{d=1}^{D_b}|w_{d,k}|,
+\quad
+h(u)=\exp\!\left(-\frac{u^2}{\tau}\right),\ \tau>0,
+\label{eq:ok_smooth}
+\end{equation}
+ou $\tau$ controle la nettete logique (plus $\tau$ est petit, plus l'approximation se rapproche
+d'une condition dure).
+
+La couche de sortie de type OR/additif s'ecrit:
+\begin{equation}
+z_c=\sum_{k=1}^{K} u_{k,c}\,o_k + b_c,\qquad c=1,\dots,C.
+\label{eq:or_layer}
+\end{equation}
+Ainsi, chaque classe combine les activations de regles via les coefficients $u_{k,c}$.
+
+\paragraph{Version hyperreseau multi-experts}
+Dans l'esprit HyperLogic, l'hyperreseau peut produire plusieurs jeux de poids
+$\{(W_m^{(m)},W_{cf}^{(m)})\}_{m=1}^{M}$.
+Pour la tete regles seule, on obtient:
+\begin{equation}
+f_M(\bm{x}^{(b)})=
+\frac{1}{M}\sum_{m=1}^{M} f_m(\bm{x}^{(b)};W_m^{(m)}),
+\label{eq:mc_experts}
+\end{equation}
+qui est une moyenne d'experts de regles.
+Dans la pratique du projet, on peut prendre $M=1$ (poids uniques par batch) ou $M>1$
+pour augmenter la diversite/robustesse des regles.
+
+\subsection{Tete contrefactuelle}
+La tete CF genere un exemple alternatif:
+\[
+\bm{x}_{cf}^{(b)}=g_{cf}\!\left(\bm{x}^{(b)},\text{onehot}(\bm{t});W_{cf}\right).
+\]
+On repasse ensuite par la tete de regles:
+\[
+\bm{z}_{cf}=f_m(\bm{x}_{cf}^{(b)};W_m),\qquad
+\hat{\bm{p}}_{cf}=\text{softmax}(\bm{z}_{cf}),\qquad
+\hat{y}_{cf}=\arg\max_c \hat{p}_{cf,c}.
+\]
+
+\paragraph{Formalisation explicite de la tete contrefactuelle}
+On concatene entree binaire et cible:
+\[
+\bm{u}=[\bm{x}^{(b)};\text{onehot}(\bm{t})]\in\mathbb{R}^{D_b+C}.
+\]
+Une parametrisation a deux couches:
+\begin{align}
+\bm{q} &= \rho\!\left(\bm{u}^\top W_{cf,1}+\bm{b}_{cf,1}\right),\\
+\bm{\pi} &= \text{sigmoid}\!\left(\bm{q}^\top W_{cf,2}+\bm{b}_{cf,2}\right),\quad \bm{\pi}\in(0,1)^{D_b},
+\end{align}
+avec:
+\[
+W_{cf}=\{W_{cf,1},\bm{b}_{cf,1},W_{cf,2},\bm{b}_{cf,2}\}.
+\]
+Le binaire de sortie peut etre echantillonne/seuille, ou traite en \emph{straight-through}:
+\[
+\bm{x}_{cf}^{(b)} \approx \text{ST}\!\left(\bm{\pi}\right).
+\]
+Cette tete apprend donc une politique de \emph{flip} de bits conditionnee par la classe cible.
+
+\section{Formulation de la perte}
+On combine quatre termes:
+\[
+\mathcal{L}
+=\lambda_{cls}\mathcal{L}_{cls}
++\lambda_{cf}\mathcal{L}_{cf}
++\lambda_{flip}\mathcal{L}_{flip}
++\lambda_{rule}\mathcal{R}_{rule}.
+\]
+
+\subsection{Perte de classification}
+\[
+\mathcal{L}_{cls}
+=\frac{1}{|\mathcal{B}|}\sum_{i\in\mathcal{B}}
+\text{CE}\!\left(\hat{\bm{p}}_i,y_i\right).
+\]
+
+\subsection{Perte de validite contrefactuelle}
+\[
+\mathcal{L}_{cf}
+=\frac{1}{|\mathcal{B}|}\sum_{i\in\mathcal{B}}
+\text{CE}\!\left(\hat{\bm{p}}_{cf,i},t_i\right).
+\]
+
+\subsection{Parcimonie des modifications}
+En espace binaire:
+\[
+\mathcal{L}_{flip}
+=\frac{1}{|\mathcal{B}|}\sum_{i\in\mathcal{B}}
+\left\|\bm{x}^{(b)}_{cf,i}-\bm{x}^{(b)}_i\right\|_1.
+\]
+Ce terme force des contrefactuels proches et actionnables.
+
+\subsection{Regularisation de regles}
+Une regularisation de sparsite sur les poids de la partie regles:
+\[
+\mathcal{R}_{rule}=\|W_m\|_1
+\quad\text{(ou sous-ensemble structure de }W_m\text{)}.
+\]
+Objectif: reduire la complexite des regles extraites.
+
+\section{Optimisation}
+L'apprentissage consiste a resoudre:
+\[
+\phi^\star=\arg\min_{\phi}\;\mathbb{E}_{(\bm{x},y)\sim\mathcal{D}}[\mathcal{L}].
+\]
+
+Par descente de gradient stochastique (Adam/AdamW):
+\[
+\phi\leftarrow\phi-\eta\nabla_\phi\mathcal{L}.
+\]
+
+Comme $W_m,W_{cf}$ dependent de $\phi$, le gradient retro-propage via la composition:
+\[
+\phi\rightarrow(W_m,W_{cf})\rightarrow
+\{f_m,g_{cf}\}\rightarrow\mathcal{L}.
+\]
+
+\section{Inference et explication}
+\subsection{Prediction}
+Pour une entree $\bm{x}$:
+\[
+\bm{x}^{(b)}=B(\bm{x}),\quad
+(W_m,W_{cf})=\mathcal{H}_\phi(\bm{s}),\quad
+\hat{y}=\arg\max f_m(\bm{x}^{(b)};W_m).
+\]
+
+\subsection{Contrefactuel}
+Pour une cible $t\neq \hat{y}$:
+\[
+\bm{x}_{cf}^{(b)}=g_{cf}\!\left(\bm{x}^{(b)},\text{onehot}(t);W_{cf}\right),\quad
+\hat{y}_{cf}=\arg\max f_m(\bm{x}_{cf}^{(b)};W_m).
+\]
+La validite est verifiee si $\hat{y}_{cf}=t$.
+
+\subsection{Projection continue optionnelle}
+Si necessaire pour l'usage metier:
+\[
+\bm{x}_{cf}=B^{-1}(\bm{x}_{cf}^{(b)}).
+\]
+Cette etape ne modifie pas la logique de decision du modele, elle sert a l'interpretation humaine.
+
+\section{Mesures d'evaluation mathematiques}
+\subsection{Classification}
+\[
+\text{Accuracy}
+=\frac{1}{N}\sum_{i=1}^{N}\mathbf{1}(\hat{y}_i=y_i),
+\]
+avec AUROC OvR et matrice de confusion en complement.
+
+\subsection{Qualite contrefactuelle}
+\[
+\text{Validity}
+=\frac{1}{N}\sum_{i=1}^{N}\mathbf{1}(\hat{y}_{cf,i}=t_i),
+\]
+\[
+\text{FlipMean}
+=\frac{1}{N}\sum_{i=1}^{N}\left\|\bm{x}^{(b)}_{cf,i}-\bm{x}^{(b)}_i\right\|_1.
+\]
+Apres projection continue:
+\[
+\text{L1Cont}
+=\frac{1}{N}\sum_{i=1}^{N}\|\bm{x}_{cf,i}-\bm{x}_i\|_1.
+\]
+
+\section{Lien conceptuel avec HyConEx et HyperLogic}
+L'hybride peut etre lu comme:
+\begin{itemize}
+    \item \textbf{Heritage HyConEx}: objectif conjoint classification+contrefactuels;
+    \item \textbf{Heritage HyperLogic}: hyperreseau producteur de poids pour un moteur de regles differentiable;
+    \item \textbf{Synthese}: un unique schema d'optimisation qui preserve explicabilite et recourse.
+\end{itemize}
+
+\section{Conclusion}
+Cette formalisation fournit une base mathematique unifiee pour
+construire, entrainer et evaluer un modele hybride HyConEx--HyperLogic.
+Le cadre est extensible:
+regularisation de diversite des regles, contraintes de causalite sur les CF,
+ou variantes multiclasses plus structurees.
+
+\end{document}

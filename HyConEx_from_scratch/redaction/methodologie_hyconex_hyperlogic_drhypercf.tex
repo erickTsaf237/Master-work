@@ -1,0 +1,213 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{hyperref}
+\geometry{margin=2.5cm}
+
+\title{Methodologie de modeles neuro-symboliques interpretable:\\
+HyConEx, HyperLogic et DR-HyperCF}
+\author{Projet de recherche -- Redaction technique}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Ce document presente, dans un format de type article scientifique, la methodologie de trois approches
+complementaires pour l'apprentissage interpretable sur donnees tabulaires:
+(i) HyConEx, qui combine classification et generation de contrefactuels;
+(ii) HyperLogic, qui integre un hyperreseau dans un apprentissage de regles differentiable;
+et (iii) une variante operationnelle du projet, DR-HyperCF, qui unifie extraction de regles et
+generation de contrefactuels en espace binaire avec projection continue finale.
+Nous detaillons pour chaque approche l'architecture, les objectifs d'optimisation, le pipeline de donnees,
+ainsi que les protocoles d'evaluation.
+\end{abstract}
+
+\section{Introduction}
+Les modeles interpretable doivent concilier deux exigences en tension:
+la \emph{performance predictive} et la \emph{lisibilite des decisions}.
+Dans les architectures de type neuro-symbolique, l'objectif est de conserver la puissance d'optimisation
+des reseaux neuronaux tout en produisant des sorties explicables (regles, motifs, ou trajectoires
+contrefactuelles).
+
+Dans ce cadre, HyConEx, HyperLogic et DR-HyperCF peuvent etre vus comme trois niveaux de design:
+\begin{itemize}
+    \item HyConEx: architecture hybride classification+CF sur variables continues;
+    \item HyperLogic: generation de poids d'un reseau de regles via hyperreseau (diversite des regles);
+    \item DR-HyperCF (ce projet): version entierement binaire pendant l'apprentissage, orientee regles et CF.
+\end{itemize}
+
+\section{Methodologie HyConEx}
+\subsection{Architecture}
+HyConEx adopte trois composantes:
+\begin{enumerate}
+    \item un encodeur tabulaire $E(\cdot)$ qui projette $x$ dans un latent $z$;
+    \item un hypermodule qui produit des parametres de classification dynamiques conditionnes par $z$;
+    \item un generateur de contrefactuels conditionne par une classe cible $y_t$.
+\end{enumerate}
+
+Pour une entree $x \in \mathbb{R}^d$:
+\begin{align}
+z &= E(x),\\
+\theta(x) &= H(z),\\
+f(x) &= \text{Classifier}_{\theta(x)}(z),\\
+x_{cf} &= \text{clip}\left(x + G\left([z,\text{onehot}(y_t)]\right), 0,1\right).
+\end{align}
+
+\subsection{Objectif d'entrainement}
+La perte combine performance de classification et qualite contrefactuelle:
+\begin{equation}
+\mathcal{L}_{HyConEx}
+= \underbrace{\text{CE}(f(x),y)}_{\text{classification}}
++ \lambda_{cf}\underbrace{\text{CE}(f(x_{cf}),y_t)}_{\text{validite CF}}
++ \lambda_1\|x_{cf}-x\|_1
++ \lambda_2\|x_{cf}-x\|_2^2.
+\end{equation}
+
+Le compromis est pilote par $\lambda_{cf}, \lambda_1, \lambda_2$.
+Une normalisation des variables dans $[0,1]$ est generalement necessaire.
+
+\subsection{Evaluation}
+HyConEx est evalue selon deux axes:
+\begin{itemize}
+    \item \textbf{Classification}: accuracy, AUROC, matrice de confusion;
+    \item \textbf{Contrefactuels}: validite ($\hat{y}_{cf}=y_t$), proximite ($L_1$), parcimonie (nombre de variables modifiees).
+\end{itemize}
+
+\section{Methodologie HyperLogic}
+\subsection{Main network de regles}
+HyperLogic part d'un reseau de regles differentiable (souvent DR-Net like), dans lequel chaque neurone
+cache encode une regle candidate et la couche de sortie combine ces regles.
+L'entree est typiquement binaire/discretisee.
+
+\subsection{Hyperreseau generateur de poids}
+Au lieu d'apprendre un unique jeu de poids $\theta$, HyperLogic apprend une distribution de poids:
+\begin{equation}
+\theta = G(\epsilon), \quad \epsilon \sim p(\epsilon),
+\end{equation}
+avec aggregation Monte-Carlo de plusieurs experts:
+\begin{equation}
+f_M(x)=\frac{1}{M}\sum_{m=1}^{M} f(x;\theta^{(m)}).
+\end{equation}
+
+Cette strategie augmente la flexibilite et la diversite des jeux de regles extraits.
+
+\subsection{Perte et regularisation}
+La fonction de cout combine:
+\begin{itemize}
+    \item une perte de tache ($\mathcal{L}_{task}$, ex. BCE/CE),
+    \item une regularisation de diversite (souvent entropique/KL),
+    \item une regularisation de sparsite des regles (souvent norme $\ell_1$).
+\end{itemize}
+
+Forme generale:
+\begin{equation}
+\mathcal{L}_{HyperLogic}
+= \mathcal{L}_{task}
++ \lambda_{div}\mathcal{R}_{div}
++ \lambda_{sp}\mathcal{R}_{sp}.
+\end{equation}
+
+\subsection{Exploitation}
+HyperLogic permet:
+\begin{enumerate}
+    \item d'echantillonner de nombreux ensembles de regles;
+    \item de selectionner un ensemble optimal selon un critere (accuracy/complexite);
+    \item d'eventuellement faire un ensemble de regles (voting) pour renforcer la robustesse.
+\end{enumerate}
+
+\section{Methodologie DR-HyperCF (nouveau module)}
+\subsection{Objectif de design}
+Le module DR-HyperCF introduit dans le projet suit les contraintes suivantes:
+\begin{itemize}
+    \item pas de bruit d'entree explicite dans l'usage courant;
+    \item binarisation en debut de pipeline;
+    \item apprentissage entierement en espace binaire;
+    \item hyperreseau generant \textbf{100\%} des poids du main network et de la tete CF;
+    \item conversion binaire$\rightarrow$continu seulement en sortie pour l'interpretation.
+\end{itemize}
+
+\subsection{Pipeline de donnees}
+Soit $x_{cont}$ l'entree continue:
+\begin{equation}
+x_{bin} = B(x_{cont}),
+\end{equation}
+ou $B$ est un binariseur par discretisation en bins + one-hot par variable.
+
+Le binariseur stocke les intervalles afin de reconstruire ensuite une representation continue:
+\begin{equation}
+x_{cf,cont}=B^{-1}(x_{cf,bin}).
+\end{equation}
+
+\subsection{Architecture a deux tetes}
+\paragraph{Tete 1: main network de regles}
+Le main network DR-like produit les logits de classe a partir de $x_{bin}$.
+Les regles sont extraites depuis ses poids (litteraux ON/OFF sur les bits binaires).
+
+\paragraph{Tete 2: generation contrefactuelle binaire}
+La tete CF prend $x_{bin}$ et $y_t$, puis genere $x_{cf,bin}$.
+La validite est verifiee en repassant $x_{cf,bin}$ dans la tete regles.
+
+\paragraph{Hyperreseau}
+L'hyperreseau recoit des statistiques de batch sur $x_{bin}$ (moyenne, ecart-type) et produit:
+\begin{equation}
+(\theta_{main},\theta_{cf}) = \mathcal{H}(\text{stats}(x_{bin})).
+\end{equation}
+
+Il n'existe pas de fusion $\alpha$ avec des poids natifs: les poids effectifs sont entierement generes.
+
+\subsection{Fonction de cout}
+La perte totale implementee suit:
+\begin{equation}
+\mathcal{L}_{DR-HyperCF}
+= \underbrace{\text{CE}(f_{main}(x_{bin}),y)}_{\mathcal{L}_{cls}}
++ \lambda_{cf}\underbrace{\text{CE}(f_{main}(x_{cf,bin}),y_t)}_{\mathcal{L}_{cf\_valid}}
++ \lambda_{flip}\underbrace{\|x_{cf,bin}-x_{bin}\|_1}_{\mathcal{L}_{flip}}
++ \lambda_{rule}\underbrace{\mathcal{R}_{rule}}_{\text{sparsite regles}}.
+\end{equation}
+
+\subsection{Interpretation des sorties}
+\begin{itemize}
+    \item \textbf{Prediction standard}: toujours issue de la tete regles.
+    \item \textbf{Sortie CF}: proposition d'une modification binaire puis conversion continue pour usage humain.
+    \item \textbf{Regles}: chaque \texttt{rule\_id} correspond a un neurone regle; les regles peuvent etre affichees en version compacte (top literals) ou complete (tous literals au-dessus d'un seuil).
+\end{itemize}
+
+\section{Comparaison synthetique des trois approches}
+\begin{table}[h]
+\centering
+\begin{tabular}{@{}llll@{}}
+\toprule
+Critere & HyConEx & HyperLogic & DR-HyperCF \\
+\midrule
+Espace principal & Continu & Binaire/Discretise & Binaire \\
+Hyperreseau & Oui (dynamique) & Oui (distribution de poids) & Oui (poids 100\%) \\
+Contrefactuels & Oui (continu) & Pas nativement central & Oui (binaire puis continu) \\
+Extraction de regles & Indirecte/moderee & Centrale & Centrale \\
+Diversite de jeux de regles & Limitee & Forte (sampling experts) & Moderee (selon hypernet) \\
+\bottomrule
+\end{tabular}
+\caption{Positionnement methodologique des trois modeles.}
+\end{table}
+
+\section{Discussion pratique}
+Pour un usage appliqué:
+\begin{enumerate}
+    \item HyConEx est adapte lorsque la priorite est la qualite des CF continus et la performance predictive.
+    \item HyperLogic est pertinent pour generer plusieurs ensembles de regles et analyser leur diversite.
+    \item DR-HyperCF est un compromis operationnel du projet, focalise sur la lisibilite logique en binaire avec projection continue finale.
+\end{enumerate}
+
+\section{Conclusion}
+Les trois methodes s'inscrivent dans une meme logique:
+integrer l'optimisation differentiable avec des structures interpretables.
+HyConEx met l'accent sur le couple classification--contrefactuels continus,
+HyperLogic sur la diversite de regles via hyperreseau,
+et DR-HyperCF sur une chaine entierement binaire pour faciliter l'extraction de regles
+et l'explicabilite des modifications contrefactuelles.
+
+\end{document}

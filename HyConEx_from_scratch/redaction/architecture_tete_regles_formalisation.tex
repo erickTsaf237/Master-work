@@ -1,0 +1,199 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{mathtools}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\geometry{margin=2.5cm}
+
+\title{Architecture et formalisation mathematique\\de la tete de regles}
+\author{Projet de recherche}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Ce document presente de maniere autonome l'architecture de la tete de regles
+utilisee dans notre modele hybride. Nous detaillons le pipeline de donnees binaires,
+la formalisation logique dure, son approximation differentiable, la couche de sortie
+multiclasse, les objectifs d'optimisation, ainsi que la procedure d'extraction de regles
+interpretables.y
+\end{abstract}
+
+\section{Objectif de la tete de regles}
+La tete de regles vise a produire une prediction multiclasse interpretable a partir d'entrees binaires.
+L'idee est de representer chaque neurone cache comme une regle candidate (conjonction de litteraux),
+puis d'agreger ces regles pour obtenir les logits de classes.
+
+\section{Notations}
+Soit:
+\begin{itemize}
+    \item $\bm{x}\in\mathbb{R}^{d}$ une entree continue;
+    \item $B(\cdot)$ l'operateur de binarisation/discretisation;
+    \item $\bm{x}^{(b)}=B(\bm{x})\in\{0,1\}^{D_b}$ la representation binaire;
+    \item $K$ le nombre de neurones-regles;
+    \item $C$ le nombre de classes;
+    \item $W_r\in\mathbb{R}^{D_b\times K}$, $\bm{b}_r\in\mathbb{R}^{K}$ les poids de la couche regles;
+    \item $W_o\in\mathbb{R}^{K\times C}$, $\bm{b}_o\in\mathbb{R}^{C}$ les poids de la couche de sortie.
+\end{itemize}
+
+On regroupe:
+\[
+W_m=\{W_r,\bm{b}_r,W_o,\bm{b}_o\}.
+\]
+
+\section{Architecture}
+\subsection{Etape 1: projection binaire}
+Les variables continues sont transformees en bits via discretisation (bins) + one-hot:
+\[
+\bm{x}^{(b)}=B(\bm{x}).
+\]
+Chaque variable d'origine est remplacee par un sous-vecteur binaire.
+
+\subsection{Etape 2: couche de regles}
+La couche cache produit un vecteur d'activations de regles:
+\[
+\bm{o}=(o_1,\dots,o_K).
+\]
+Chaque $o_k$ mesure a quel point la regle $k$ est satisfaite.
+
+\subsection{Etape 3: couche OR/additive multiclasse}
+Les logits sont obtenus par combinaison lineaire des activations de regles:
+\[
+\bm{z}=\bm{o}^\top W_o + \bm{b}_o,\qquad
+\hat{\bm{p}}=\text{softmax}(\bm{z}).
+\]
+Prediction finale:
+\[
+\hat{y}=\arg\max_{c\in\{1,\dots,C\}}\hat{p}_c.
+\]
+
+\section{Formalisation mathematique de la couche regles}
+\subsection{Version logique dure (ideal theorique)}
+Dans l'esprit HyperLogic/DR-Net, pour la regle $k$:
+\begin{equation}
+o_k
+=\mathbf{1}\!\left\{
+\sum_{d=1}^{D_b} w_{d,k}x_d^{(b)}-\sum_{d=1}^{D_b}|w_{d,k}|=0
+\right\}.
+\label{eq:hard_rule}
+\end{equation}
+
+Interpretation:
+\begin{itemize}
+    \item $w_{d,k}>0$: la regle prefere l'activation du bit $x_d^{(b)}$;
+    \item $w_{d,k}<0$: la regle prefere la non-activation du bit;
+    \item $w_{d,k}\approx 0$: litteral peu informatif pour cette regle.
+\end{itemize}
+
+\subsection{Version differentiable (utilisee en apprentissage)}
+Comme l'indicatrice de \eqref{eq:hard_rule} n'est pas differentiable, on introduit:
+\[
+u_k=\sum_{d=1}^{D_b} w_{d,k}x_d^{(b)}-\sum_{d=1}^{D_b}|w_{d,k}|.
+\]
+Puis une approximation lisse:
+\begin{equation}
+o_k \approx h(u_k),\qquad
+h(u)=\exp\!\left(-\frac{u^2}{\tau}\right),\ \tau>0.
+\label{eq:smooth_rule}
+\end{equation}
+
+Alternative usuelle en implementation:
+\[
+o_k=\sigma\!\left(\frac{u_k+b_{r,k}}{\tau}\right),
+\]
+avec $\sigma$ sigmoide.
+Le parametre $\tau$ controle la nettete logique.
+
+\section{Formalisation multiclasse}
+Pour chaque classe $c$:
+\[
+z_c=\sum_{k=1}^{K} u_{k,c}\,o_k+b_{o,c},
+\]
+ou $u_{k,c}$ est l'element $(k,c)$ de $W_o$.
+Chaque classe est donc une combinaison de regles apprises.
+
+\section{Objectif d'optimisation de la tete de regles}
+La perte de classification:
+\[
+\mathcal{L}_{cls}
+=\frac{1}{|\mathcal{B}|}\sum_{i\in\mathcal{B}}
+\text{CE}\!\left(\hat{\bm{p}}_i,y_i\right).
+\]
+
+Regularisation de parcimonie sur la structure regles:
+\[
+\mathcal{R}_{rule}=\|W_r\|_1.
+\]
+
+Objectif total (version tete regles seule):
+\[
+\mathcal{L}_{rule}
+=\mathcal{L}_{cls}+\lambda_{rule}\mathcal{R}_{rule}.
+\]
+
+\section{Extraction de regles interpretable}
+\subsection{Regle neurone $k$}
+On lit la colonne $W_r[:,k]$:
+\begin{itemize}
+    \item signe du poids $\to$ ON/OFF du litteral;
+    \item module du poids $\to$ importance locale du litteral.
+\end{itemize}
+
+Une regle textuelle est construite sous la forme:
+\[
+\text{IF } \ell_{k,1}\wedge \ell_{k,2}\wedge \cdots \wedge \ell_{k,m}
+\text{ THEN class } c^\star_k,
+\]
+avec:
+\[
+c^\star_k=\arg\max_{c} W_o[k,c].
+\]
+
+\subsection{Version compacte vs complete}
+\begin{itemize}
+    \item \textbf{Compacte}: top-$m$ litteraux selon $|w_{d,k}|$.
+    \item \textbf{Complete}: tous les litteraux au-dessus d'un seuil (ou tous, seuil nul).
+\end{itemize}
+
+\section{Complexite et compromis}
+Augmenter $K$ enrichit le vocabulaire de regles mais peut:
+\begin{itemize}
+    \item augmenter le risque de redondance;
+    \item diminuer la lisibilite globale sans regularisation;
+    \item alourdir le cout d'interpretation humaine.
+\end{itemize}
+
+Le compromis pratique est pilote par:
+\begin{itemize}
+    \item $K$ (nombre de regles),
+    \item $\lambda_{rule}$ (sparsite),
+    \item $\tau$ (rigidite logique).
+\end{itemize}
+
+\section{Resume operationnel}
+La tete de regles suit la chaine:
+\[
+\bm{x}\xrightarrow[]{B}\bm{x}^{(b)}
+\xrightarrow[]{W_r,\bm{b}_r}\bm{o}
+\xrightarrow[]{W_o,\bm{b}_o}\bm{z}
+\xrightarrow[]{\text{softmax}}\hat{\bm{p}}
+\xrightarrow[]{\arg\max}\hat{y}.
+\]
+
+Elle fournit simultanement:
+\begin{enumerate}
+    \item une prediction multiclasse;
+    \item une decomposition interpretable en regles neurones.
+\end{enumerate}
+
+\section{Conclusion}
+La formalisation precedente montre que la tete de regles est un bloc neuro-symbolique differentiable:
+la logique est approchee de maniere lisse pendant l'apprentissage, puis lue symboliquement
+au travers des poids pour produire des regles IF-THEN exploitables.
+
+\end{document}
