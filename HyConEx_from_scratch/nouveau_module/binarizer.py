@@ -4,7 +4,7 @@ import numpy as np
 
 
 class TabularBinarizer:
-    """Discrétisation en bins + one-hot binaire par feature."""
+    """Discrétisation en bins + encodage bipolar {-1, +1} par feature (un bin actif à +1, les autres à -1)."""
 
     def __init__(self, bins_per_feature: int = 4) -> None:
         self.bins_per_feature = bins_per_feature
@@ -40,7 +40,7 @@ class TabularBinarizer:
     def transform(self, x: np.ndarray) -> np.ndarray:
         x = np.asarray(x, dtype=np.float32)
         n = x.shape[0]
-        out = np.zeros((n, self.n_binary_features_), dtype=np.float32)
+        out = np.full((n, self.n_binary_features_), -1.0, dtype=np.float32)
         for j, edges in enumerate(self.edges_):
             s, e = self._offsets[j]
             bins = np.digitize(x[:, j], edges[1:-1], right=False)
@@ -59,6 +59,7 @@ class TabularBinarizer:
         for j, edges in enumerate(self.edges_):
             s, e = self._offsets[j]
             chunk = x_bin[:, s:e]
+            # Un seul +1 par groupe ; les autres sont -1.
             idx = np.argmax(chunk, axis=1)
             left = edges[idx]
             right = edges[idx + 1]

@@ -23,9 +23,11 @@ def unpack_cf_params(theta: torch.Tensor, input_dim: int, num_classes: int, hidd
     return w1, b1, w2, b2
 
 
-def _straight_through_binary(p: torch.Tensor, threshold: float = 0.5) -> torch.Tensor:
-    hard = (p > threshold).float()
-    return hard + p - p.detach()
+def _straight_through_bipolar(p: torch.Tensor, threshold: float = 0.5) -> torch.Tensor:
+    """p = σ(logit) interprété comme P(bit=+1). Sortie dure dans {-1,+1}, ST sur 2p-1."""
+    soft = 2 * p - 1
+    hard = torch.where(p > threshold, torch.ones_like(p), -torch.ones_like(p))
+    return hard + soft - soft.detach()
 
 
 def generate_cf_binary(
@@ -44,5 +46,5 @@ def generate_cf_binary(
     logits = h @ w2 + b2
     p_flip = torch.sigmoid(logits)
 
-    x_cf = _straight_through_binary(p_flip, threshold=0.5)
+    x_cf = _straight_through_bipolar(p_flip, threshold=0.5)
     return x_cf

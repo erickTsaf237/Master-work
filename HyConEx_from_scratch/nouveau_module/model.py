@@ -19,7 +19,7 @@ class ForwardOutputs:
 
 
 class HybridDRNetModel(nn.Module):
-    """HyConEx+DRNet binaire: hyperréseau -> main network + tête CF."""
+    """HyConEx + DR-Net (HyperLogic): entrée bipolar {-1,+1}, hyperréseau -> règles h(u) + tête CF."""
 
     def __init__(
         self,

@@ -136,7 +136,7 @@ class HybridDRTrainer:
                 ce_cf = ce_cf_all[mask_flat].mean()
 
                 x_rep = xb.unsqueeze(1).expand(-1, num_classes, -1)
-                flip_all = (x_cf_all - x_rep).abs().mean(dim=2)
+                flip_all = (x_cf_all != x_rep).float().mean(dim=2)
                 flip_cost = flip_all[valid_mask].mean()
 
                 w_rule, _, _, _ = unpack_main_params(
@@ -251,7 +251,7 @@ class HybridDRTrainer:
         validity = validity_mat[valid_mask].mean().item()
 
         x_rep = x_t.unsqueeze(1).expand(-1, num_classes, -1)
-        flips_mat = (x_cf_all - x_rep).abs().sum(dim=2)
+        flips_mat = (x_cf_all != x_rep).float().sum(dim=2)
         flips = flips_mat[valid_mask].mean().item()
 
         x_cf_all_np = x_cf_all.detach().cpu().numpy().reshape(-1, x_t.shape[1])
@@ -272,8 +272,8 @@ class HybridDRTrainer:
         if self.model is None:
             raise RuntimeError("Aucun modèle entraîné. Lance fit() d'abord.")
 
-        # Utilise un batch synthétique uniforme pour extraire theta globalement stable.
-        x_probe = torch.full((16, self.model.input_dim_bin), 0.5, device=self.device)
+        # Batch synthétique neutre (0 = milieu de {-1,+1}) pour stabiliser les stats d'hyperréseau.
+        x_probe = torch.zeros((16, self.model.input_dim_bin), device=self.device, dtype=torch.float32)
         with torch.no_grad():
             theta_main, _ = self.model.hyper(x_probe)
         w_rule, _, w_out, _ = unpack_main_params(

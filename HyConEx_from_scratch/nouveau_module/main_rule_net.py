@@ -29,10 +29,13 @@ def main_logits_from_weights(
     num_classes: int,
     temperature: float,
 ) -> tuple[torch.Tensor, torch.Tensor, tuple[torch.Tensor, ...]]:
+    """HyperLogic/DR-Net: x_bin ∈ {-1,+1}^D, u_k = x^T w_k - ||w_k||_1 + b_k, o_k = exp(-u_k^2/τ)."""
     w_rule, b_rule, w_out, b_out = unpack_main_params(theta_main, input_dim, num_rules, num_classes)
 
-    rule_pre = x_bin @ w_rule + b_rule
-    rule_act = torch.sigmoid(rule_pre / max(temperature, 1e-6))
+    abs_sum = w_rule.abs().sum(dim=0)  # (K,)
+    u = x_bin @ w_rule - abs_sum.unsqueeze(0) + b_rule.unsqueeze(0)
+    tau = max(float(temperature), 1e-6)
+    rule_act = torch.exp(-(u * u) / tau)
     logits = rule_act @ w_out + b_out
     return logits, rule_act, (w_rule, b_rule, w_out, b_out)
 
@@ -57,8 +60,9 @@ def extract_rules(
         active_sorted = sorted(active, key=lambda i: abs(wr[i]), reverse=True)[:top_per_rule]
         conds = []
         for i in active_sorted:
-            sign = "ON" if wr[i] >= 0 else "OFF"
-            conds.append(f"{binary_feature_names[i]}={sign}")
+            # w>0 : littéral satisfait pour x=+1 ; w<0 : satisfait pour x=-1 (encodage HyperLogic ±1).
+            literal = "+1" if wr[i] >= 0 else "-1"
+            conds.append(f"{binary_feature_names[i]}={literal}")
 
         target_class_idx = int(w_out_np[k].argmax())
         confidence = float(F.softmax(torch.tensor(w_out_np[k]), dim=0)[target_class_idx].item())

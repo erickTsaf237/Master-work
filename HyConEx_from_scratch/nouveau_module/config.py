@@ -14,7 +14,8 @@ class HybridDRConfig:
     num_rules: int = 48
     hyper_hidden_dim: int = 128
     cf_hidden_dim: int = 128
-    temperature: float = 0.8
+    # τ dans o_k = exp(-u_k^2/τ) (porte HyperLogic) ; plus petit = gating plus net.
+    temperature: float = 0.15
 
     bins_per_feature: int = 4
 
