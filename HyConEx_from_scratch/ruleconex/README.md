@@ -2,127 +2,147 @@
 
 **Rule-based Counterfactual eXplainer** — modèle unifié pour le contrôle d'accès basé sur l'apprentissage profond (DLBAC).
 
-RuleConEx combine en **un seul forward pass** :
-- une **classification** performante (grant/deny ou profils d'opérations),
-- des **règles IF-THEN** locales décodables (inspiré de [HyperLogic](https://arxiv.org/abs/2402.00000)),
-- des **contrefactuels actionnables** (inspiré de [HyConEx](https://arxiv.org/abs/2601.00000)).
+Les modèles performants (DLBAC) ne s'expliquent pas ; ceux qui s'expliquent le font souvent d'un seul côté : **règles sans contrefactuels** (HyperLogic) ou **contrefactuels sans règles** (HyConEx). RuleConEx combine les deux en **un seul forward pass**.
 
-Conçu pour les jeux de données **DLBAC** (synthétiques + Amazon), avec métadonnées encodées en one-hot.
+Pour chaque requête d'accès (métadonnées utilisateur et ressource encodées), le modèle produit :
+
+1. une **décision** `ŷ` et les probabilités associées ;
+2. des **règles IF-THEN** lisibles (`oh_* → ops_pattern_*` ou `grant`/`deny`) ;
+3. des **contrefactuels** `x'_t` vers chaque classe alternative `t ≠ ŷ`, avec le minimum de modifications one-hot.
 
 ---
 
-## Fonctionnalités
+## Problème et données
 
-| Capacité | Description |
-|----------|-------------|
-| **Classification** | Fusion de 3 branches : HyConEx (linéaire local), HyperLogic (règles), TabResNet (deep optionnel) |
-| **Règles IF-THEN** | Extraction de règles `oh_* → ops_pattern_*` avec scores de confiance |
-| **Importances locales** | Métadonnées dominantes par classe, par requête |
-| **Contrefactuels** | Profils alternatifs minimaux pour changer la décision d'accès |
-| **Monte Carlo** | M échantillons de règles à l'entraînement, M' à l'inférence (diversité HyperLogic) |
+Une requête d'autorisation est modélisée comme un tuple `(uid, rid, m^u, m^r, op)`. RuleConEx prédit la classe `y` à partir des métadonnées encodées `x ∈ R^d` :
+
+- **Jeux synthétiques** (8 jeux) : les 4 opérations binaires forment 16 classes `ops_pattern_0` … `ops_pattern_15`.
+- **Jeux Amazon** (3 jeux) : classification binaire `deny` / `grant`.
+
+Le prétraitement est implémenté dans `prepare_dlbac_datasets.py` (protocole DLBACα) :
+
+1. suppression de `uid` / `rid` ;
+2. masquage des métadonnées au-delà des 8 premières (user et resource) ;
+3. étiquette jointe (synthétique) ou binaire (Amazon) ;
+4. encodage one-hot (fit sur le train) ;
+5. split 80 % train / 20 % validation + test officiel → `data/dlbac_prepared/*.npz` ;
+6. bipolarisation `{-1,+1}^d` pour la branche règles (DR-Net).
 
 ---
 
 ## Architecture
 
-```mermaid
-flowchart TB
-    X["Entrée x (one-hot)"] --> ENC["Encodeur → z"]
-    X --> HYP["Hyperréseau TabResNet"]
+RuleConEx s'articule autour d'un **encodeur**, d'un **hyperréseau TabResNet** et de **deux branches** fusionnées.
 
-    HYP --> HCX["Branche HyConEx\n(classifieur linéaire local)"]
-    HYP --> RULES["Branche HyperLogic\n(règles IF-THEN, MC)"]
-    HYP --> CF["Tête contrefactuelle θ_cf"]
-    HYP --> DEEP["Branche deep (optionnelle)"]
+```
+Entrée x ∈ [0,1]^d
+    │
+    ├─► Encodeur MLP + LayerNorm ──► z ∈ R^64
+    │
+    └─► Hyperréseau H(x) ──► θ_règles, θ_CF, θ_HyC
+              │
+              ├─► Branche règles (DR-Net, K=48) ──► z^règles
+              │       entrée bipolaire, Monte Carlo (M=3 train, M=5 inférence)
+              │
+              └─► Branche HyConEx (classifieur linéaire local) ──► z^HyC
+                        │
+                        └─► Contrefactuels : x' = 0.55·x_sub + 0.45·x_flip
 
-    HCX --> FUS["Fusion softmax"]
-    RULES --> FUS
-    DEEP --> FUS
-    FUS --> PRED["Prédiction ŷ, probabilités"]
-
-    HCX --> IMP["Importances I"]
-    IMP --> SUB["CF sub : x − λ·I_t"]
-    CF --> FLIP["CF flip : bascules apprises"]
-    SUB --> XCF["x' = 0.55·sub + 0.45·flip"]
-    FLIP --> XCF
+Fusion : p̂ = softmax(α_h·z^HyC + α_r·z^règles)   →   ŷ = argmax p̂
 ```
 
-### Contrefactuels : deux candidats complémentaires
+### Branche règles (HyperLogic)
 
-| Mécanisme | Idée | Intérêt |
-|-----------|------|---------|
-| **sub** | `x_sub = clip(x − 0.35·I_{t,:}, 0, 1)` | Proximité, lien avec les importances HyConEx |
-| **flip** | MLP conditionné par `[x ; onehot(t)]` → bascules ±1 | Flips discrets actionnables sur les métadonnées |
+Réseau de règles différentiable (DR-Net) à **K = 48** neurones-règles. Chaque règle `k` est décodée en clause IF-THEN sur les 4 littéraux `oh_j` les plus importants ; la classe THEN est `argmax_c w^out_{k,c}`.
 
-> Sur les jeux à **haute dimension** (Amazon, `d > 512`), seul le mécanisme **sub** est utilisé ; les règles et l'hyperréseau opèrent dans l'espace latent `z`.
+Exemple :
+
+```
+IF oh_8=+1 AND oh_32=+1 AND oh_55=-1 AND oh_62=-1 THEN ops_pattern_6
+```
+
+### Branche contrefactuels (HyConEx)
+
+Pour une classe cible `t`, deux candidats sont combinés :
+
+- **sub** : `x_sub = clip(x - 0.35·W_t, 0, 1)` — translation vers la frontière de la classe `t` ;
+- **flip** : tête MLP conditionnée sur `t`, modifications one-hot discrètes ;
+- **fusion** : `x' = 0.55·x_sub + 0.45·x_flip`.
+
+Un contrefactuel est **valide** si `f(x') = t`.
+
+> Sur les jeux Amazon à haute dimension (`d > 512`), seul le mécanisme **sub** est utilisé ; l'hyperréseau et les règles opèrent dans l'espace latent.
+
+### Hyperparamètres principaux
+
+| Composante | Paramètre | Défaut |
+|------------|-----------|--------|
+| Encodeur | dimension latente `m` | 64 |
+| Hyperréseau | bruit MC `σ` | 0,08 (appris) |
+| Branche règles | neurones-règles `K` | 48 |
+| Branche règles | température `τ` | 0,7 |
+| Branche CF | facteur `λ` (sub) | 0,35 |
+| Fusion | `α_h`, `α_r` | 0,45 chacun |
 
 ---
 
-## Structure du module
+## Entraînement
 
-```
-ruleconex/
-├── README.md              # Ce fichier
-├── config.py              # RuleConExConfig (hyperparamètres)
-├── model.py               # RuleConExModel, hyperréseau, génération CF
-├── trainer.py             # RuleConExTrainer (entraînement GPU)
-├── loss.py                # Perte composite (CE + CF + régularisations)
-├── evaluate.py            # Métriques classification + validité CF
-├── utils.py               # explain_sample, extraction de règles, rapports CF
-├── visualize.py           # Courbes, heatmaps, comparaisons
-├── main.py                # CLI d'entraînement
-├── test_ruleconex.py      # Tests rapides
-└── RuleConEx_Demo.ipynb   # Démonstration interactive
-```
+Perte composite optimisée conjointement :
 
-**Dépendances internes** (dépôt parent `HyConEx_from_scratch`) :
-- `nouveau_module/` — hyperréseau TabResNet, tête CF, DR-Net
-- `prepare_dlbac_datasets.py` — jeux DLBAC préparés
-- `train_nouveau_module_dlbac_quantile.py` — chargement des splits one-hot
+- **CE** sur la décision fusionnée ;
+- **CE** sur la branche règles (`λ_r = 0,08`) ;
+- **CE** sur les contrefactuels vers une classe alternative `t` (`λ_cf = 0,12`) ;
+- proximité L1 / L2 des CF (`λ_1 = λ_2 = 0,04`) ;
+- sparsité des règles (`λ_sp = 0,002`) ;
+- diversité Monte Carlo via KL symétrique (`λ_kl = 0,05`).
+
+| Réglage | Valeur |
+|---------|--------|
+| Optimiseur | AdamW, `lr = 1e-3`, `weight_decay = 1e-5` |
+| Sélection modèle | meilleure accuracy de validation |
+| Époques | 40 (synthétiques), 25–35 (Amazon) |
+| Matériel | GPU CUDA requis |
 
 ---
 
-## Prérequis
+## Inférence
 
-- **Python** ≥ 3.10
-- **PyTorch** avec **CUDA** (GPU obligatoire pour l'entraînement)
-- **NumPy**, **scikit-learn**, **matplotlib**
+En une passe avant, RuleConEx retourne :
 
-Environnement Conda recommandé :
+| Sortie | Description |
+|--------|-------------|
+| Décision | `ŷ`, probabilités `p̂` |
+| Règles | clauses IF-THEN classées par score |
+| Contrefactuels | `x'_t` et liste des attributs modifiés `Δ_t` |
+| Audit | logits par branche — divergence = instance proche d'une frontière |
+
+API : `explain_sample()`, `counterfactual_report()`, `extract_rules_from_pack()`.
+
+---
+
+## Installation
 
 ```bash
 conda create -n hyconex python=3.11 pytorch pytorch-cuda=12.1 -c pytorch -c nvidia
 conda activate hyconex
 pip install numpy scikit-learn matplotlib
-```
 
-Les jeux DLBAC doivent être préparés au préalable :
-
-```bash
 cd HyConEx_from_scratch
 python prepare_dlbac_datasets.py --all
 ```
 
-Les fichiers `.npz` / `.json` sont écrits dans `data/dlbac_prepared/`.
+Dépendances internes : `nouveau_module/`, `prepare_dlbac_datasets.py`, `train_nouveau_module_dlbac_quantile.py`.
 
 ---
 
-## Démarrage rapide
+## Utilisation
 
-### Ligne de commande
-
-Depuis la racine `HyConEx_from_scratch/` :
+### CLI
 
 ```bash
 python -m ruleconex.main --dataset u4k-r4k-auth11k
 python -m ruleconex.main --dataset amazon1 --epochs 30 --explain
-python -m ruleconex.main --dataset u4k-r4k-auth11k --no-baselines --out-dir outputs/ruleconex/run1
-```
-
-Sous Windows (environnement Conda `hyconex`) :
-
-```powershell
-.\run_with_hyconex.ps1 -m ruleconex.main --dataset u4k-r4k-auth11k
 ```
 
 ### API Python
@@ -135,102 +155,67 @@ from ruleconex import RuleConExConfig, RuleConExTrainer, explain_sample
 specs = {s.name: s for s in discover_dlbac_datasets()}
 splits = build_onehot_splits(specs["u4k-r4k-auth11k"], random_state=42)
 
-cfg = RuleConExConfig(epochs=30, batch_size=128, num_rules=48)
-trainer = RuleConExTrainer(cfg, device="cuda")
-result = trainer.fit(
+trainer = RuleConExTrainer(RuleConExConfig(epochs=30), device="cuda")
+trainer.fit(
     splits.x_train, splits.y_train,
     splits.x_val, splits.y_val,
     feature_names=splits.feature_names,
     class_names=splits.class_names,
 )
 
-# Explication complète (prédiction + règles + contrefactuels)
-report = explain_sample(
-    trainer.model,
-    splits.x_test[0],
-    None,
+print(explain_sample(
+    trainer.model, splits.x_test[0], None,
     feature_names=splits.feature_names,
     class_names=splits.class_names,
     device=trainer.device,
-)
-print(report.text_report)
+).text_report)
 ```
 
-### Notebook de démonstration
-
-Ouvrir `ruleconex/RuleConEx_Demo.ipynb` : chargement des données, entraînement, métriques, courbes, règles et contrefactuels.
-
-### Tests
+### Notebook et tests
 
 ```bash
-python ruleconex/test_ruleconex.py
+jupyter notebook ruleconex/RuleConEx_Demo.ipynb
 python ruleconex/test_ruleconex.py --dataset u4k-r4k-auth11k --epochs 5
 ```
 
 ---
 
-## Jeux de données supportés
+## Structure du module
 
-| Type | Exemples | Classes | Remarques |
-|------|----------|---------|-----------|
-| Synthétiques DLBAC | `u4k-r4k-auth11k`, `u5k-r5k-auth12k`, … | 16 (`ops_pattern_*`) | sub + flip, règles sur entrée |
-| Amazon (réels) | `amazon1`, `amazon2`, `amazon3` | 2 (deny / grant) | sub seul, auto-tune mémoire GPU |
-
-Découverte automatique via `discover_dlbac_datasets()` dans `data/dlbac_prepared/`.
-
----
-
-## Configuration
-
-Hyperparamètres par défaut (`RuleConExConfig`) :
-
-| Paramètre | Défaut | Rôle |
-|-----------|--------|------|
-| `epochs` | 40 | Nombre d'époques |
-| `batch_size` | 128 | Taille de lot (réduit auto. si `d > 512`) |
-| `lr` | 1e-3 | Taux d'apprentissage (AdamW) |
-| `num_rules` | 48 | Nombre de neurones-règles HyperLogic |
-| `mc_train_samples` | 3 | Échantillons Monte Carlo (train) |
-| `mc_infer_samples` | 5 | Échantillons Monte Carlo (inférence) |
-| `cf_lambda` | 0.12 | Poids perte contrefactuelle |
-| `conex_lambda` | 0.08 | Proximité L1 des CF |
-| `flip_lambda` | 0.04 | Proximité L2 des CF |
-
-Le checkpoint retenu est celui qui maximise l'**accuracy de validation** sur l'ensemble des époques.
+```
+ruleconex/
+├── config.py       # RuleConExConfig
+├── model.py        # RuleConExModel, hyperréseau, génération CF
+├── trainer.py      # entraînement GPU
+├── loss.py         # perte composite
+├── evaluate.py     # métriques classification + validité CF
+├── utils.py        # explications, décodage des règles
+├── visualize.py    # courbes et graphiques
+├── main.py         # CLI
+└── RuleConEx_Demo.ipynb
+```
 
 ---
 
-## Sorties et explicabilité
+## Positionnement
 
-En inférence, `explain_sample()` produit :
-
-1. **Prédiction** et probabilités par classe
-2. **Top importances** locales (`oh_*`)
-3. **Règles IF-THEN** décodées (`extract_rules_from_pack`)
-4. **Contrefactuels** vers les classes alternatives les plus probables (`counterfactual_report`)
-
-Métriques d'évaluation (`evaluate_ruleconex`) :
-
-- Classification : accuracy, F1 macro, précision, rappel, AUC (binaire)
-- Contrefactuels : `validity_cf`, `changed_features_mean`, `proximity_l1_mean`, `flip_success_rate`
+| Approche | Décision | Règles IF-THEN | Contrefactuels | Single forward |
+|----------|:--------:|:--------------:|:--------------:|:--------------:|
+| DLBACα | ✓ | ✗ | ✗ | ✓ |
+| HyperLogic | ✓ | ✓ | ✗ | ✓ |
+| HyConEx | ✓ | ✗ | ✓ | ✓ |
+| **RuleConEx** | **✓** | **✓** | **✓** | **✓** |
 
 ---
 
 ## Références
 
-- **DLBAC** — Karimi et al., *Deep Learning Based Access Control*, 2022
-- **HyConEx** — Marszalek et al., *Hypernetwork Classifier with Counterfactual Explanations*, 2026
-- **HyperLogic** — *Enhancing Diversity and Accuracy in Rule Learning with HyperNets*, 2024
+- Nobi et al., *DLBAC*, 2022
+- Yang et al., *HyperLogic*, 2024
+- Marszalek et al., *HyConEx*, 2026
 
 ---
 
 ## Auteur
 
-**TSAFACK NTEUDEM ERICK** — Mémoire de Master 2, Université de Dschang  
-Projet de recherche sur l'explicabilité du contrôle d'accès basé sur le deep learning.
-
----
-
-## Licence
-
-Ce module fait partie du dépôt de recherche `HyConEx_from_scratch`. Voir la licence du dépôt parent pour les conditions d'utilisation et de redistribution.
+**TSAFACK NTEUDEM ERICK** — Université de Dschang, Master 2 Recherche.
