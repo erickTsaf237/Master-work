@@ -1,0 +1,266 @@
+[
+  {
+    "name": "u4k-r4k-auth11k",
+    "kind": "synthetic",
+    "train_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\synthetic\\u4k-r4k-auth11k\\train_u4k-r4k-auth11k.sample",
+    "test_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\synthetic\\u4k-r4k-auth11k\\test_u4k-r4k-auth11k.sample",
+    "label_mode": "joint_ops",
+    "num_ops": 4,
+    "has_train": true,
+    "npz": "D:\\ecole\\master 2\\recherche\\INN\\projet\\HyConEx_from_scratch\\data\\dlbac_prepared\\u4k-r4k-auth11k.npz",
+    "shapes": {
+      "train": [
+        7017,
+        157
+      ],
+      "val": [
+        1755,
+        157
+      ],
+      "test": [
+        2192,
+        157
+      ]
+    }
+  },
+  {
+    "name": "u4k-r4k-auth21k",
+    "kind": "synthetic",
+    "train_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\synthetic\\u4k-r4k-auth21k\\train_u4k-r4k-auth21k.sample",
+    "test_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\synthetic\\u4k-r4k-auth21k\\test_u4k-r4k-auth21k.sample",
+    "label_mode": "joint_ops",
+    "num_ops": 4,
+    "has_train": true,
+    "npz": "D:\\ecole\\master 2\\recherche\\INN\\projet\\HyConEx_from_scratch\\data\\dlbac_prepared\\u4k-r4k-auth21k.npz",
+    "shapes": {
+      "train": [
+        13427,
+        146
+      ],
+      "val": [
+        3357,
+        146
+      ],
+      "test": [
+        4195,
+        146
+      ]
+    }
+  },
+  {
+    "name": "u4k-r4k-auth22k",
+    "kind": "synthetic",
+    "train_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\synthetic\\u4k-r4k-auth22k\\train_u4k-r4k-auth22k.sample",
+    "test_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\synthetic\\u4k-r4k-auth22k\\test_u4k-r4k-auth22k.sample",
+    "label_mode": "joint_ops",
+    "num_ops": 4,
+    "has_train": true,
+    "npz": "D:\\ecole\\master 2\\recherche\\INN\\projet\\HyConEx_from_scratch\\data\\dlbac_prepared\\u4k-r4k-auth22k.npz",
+    "shapes": {
+      "train": [
+        14453,
+        133
+      ],
+      "val": [
+        3614,
+        133
+      ],
+      "test": [
+        4516,
+        133
+      ]
+    }
+  },
+  {
+    "name": "u4k-r6k-auth28k",
+    "kind": "synthetic",
+    "train_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\synthetic\\u4k-r6k-auth28k\\train_u4k-r6k-auth28k.sample",
+    "test_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\synthetic\\u4k-r6k-auth28k\\test_u4k-r6k-auth28k.sample",
+    "label_mode": "joint_ops",
+    "num_ops": 4,
+    "has_train": true,
+    "npz": "D:\\ecole\\master 2\\recherche\\INN\\projet\\HyConEx_from_scratch\\data\\dlbac_prepared\\u4k-r6k-auth28k.npz",
+    "shapes": {
+      "train": [
+        18400,
+        145
+      ],
+      "val": [
+        4601,
+        145
+      ],
+      "test": [
+        5750,
+        145
+      ]
+    }
+  },
+  {
+    "name": "u4k-r7k-auth20k",
+    "kind": "synthetic",
+    "train_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\synthetic\\u4k-r7k-auth20k\\train_u4k-r7k-auth20k.sample",
+    "test_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\synthetic\\u4k-r7k-auth20k\\test_u4k-r7k-auth20k.sample",
+    "label_mode": "joint_ops",
+    "num_ops": 4,
+    "has_train": true,
+    "npz": "D:\\ecole\\master 2\\recherche\\INN\\projet\\HyConEx_from_scratch\\data\\dlbac_prepared\\u4k-r7k-auth20k.npz",
+    "shapes": {
+      "train": [
+        12821,
+        152
+      ],
+      "val": [
+        3206,
+        152
+      ],
+      "test": [
+        4006,
+        152
+      ]
+    }
+  },
+  {
+    "name": "u5k-r5k-auth12k",
+    "kind": "synthetic",
+    "train_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\synthetic\\u5k-r5k-auth12k\\train_u5k-r5k-auth12k.sample",
+    "test_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\synthetic\\u5k-r5k-auth12k\\test_u5k-r5k-auth12k.sample",
+    "label_mode": "joint_ops",
+    "num_ops": 4,
+    "has_train": true,
+    "npz": "D:\\ecole\\master 2\\recherche\\INN\\projet\\HyConEx_from_scratch\\data\\dlbac_prepared\\u5k-r5k-auth12k.npz",
+    "shapes": {
+      "train": [
+        8121,
+        170
+      ],
+      "val": [
+        2031,
+        170
+      ],
+      "test": [
+        2538,
+        170
+      ]
+    }
+  },
+  {
+    "name": "u5k-r5k-auth19k",
+    "kind": "synthetic",
+    "train_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\synthetic\\u5k-r5k-auth19k\\train_u5k-r5k-auth19k.sample",
+    "test_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\synthetic\\u5k-r5k-auth19k\\test_u5k-r5k-auth19k.sample",
+    "label_mode": "joint_ops",
+    "num_ops": 4,
+    "has_train": true,
+    "npz": "D:\\ecole\\master 2\\recherche\\INN\\projet\\HyConEx_from_scratch\\data\\dlbac_prepared\\u5k-r5k-auth19k.npz",
+    "shapes": {
+      "train": [
+        12502,
+        164
+      ],
+      "val": [
+        3126,
+        164
+      ],
+      "test": [
+        3907,
+        164
+      ]
+    }
+  },
+  {
+    "name": "u6k-r6k-auth32k",
+    "kind": "synthetic",
+    "train_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\synthetic\\u6k-r6k-auth32k\\train_u6k-r6k-auth32k.sample",
+    "test_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\synthetic\\u6k-r6k-auth32k\\test_u6k-r6k-auth32k.sample",
+    "label_mode": "joint_ops",
+    "num_ops": 4,
+    "has_train": true,
+    "npz": "D:\\ecole\\master 2\\recherche\\INN\\projet\\HyConEx_from_scratch\\data\\dlbac_prepared\\u6k-r6k-auth32k.npz",
+    "shapes": {
+      "train": [
+        20836,
+        154
+      ],
+      "val": [
+        5210,
+        154
+      ],
+      "test": [
+        6511,
+        154
+      ]
+    }
+  },
+  {
+    "name": "amazon1",
+    "kind": "real_world",
+    "train_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\real-world\\amazon1\\train_amazon1.sample",
+    "test_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\real-world\\amazon1\\test_amazon1.sample",
+    "label_mode": "binary_access",
+    "num_ops": 1,
+    "has_train": true,
+    "npz": "D:\\ecole\\master 2\\recherche\\INN\\projet\\HyConEx_from_scratch\\data\\dlbac_prepared\\amazon1.npz",
+    "shapes": {
+      "train": [
+        20972,
+        14419
+      ],
+      "val": [
+        5244,
+        14419
+      ],
+      "test": [
+        6553,
+        14419
+      ]
+    }
+  },
+  {
+    "name": "amazon2",
+    "kind": "real_world",
+    "train_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\real-world\\amazon2\\train_amazon2.sample",
+    "test_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\real-world\\amazon2\\test_amazon2.sample",
+    "label_mode": "binary_access",
+    "num_ops": 1,
+    "has_train": true,
+    "npz": "D:\\ecole\\master 2\\recherche\\INN\\projet\\HyConEx_from_scratch\\data\\dlbac_prepared\\amazon2.npz",
+    "shapes": {
+      "train": [
+        20972,
+        9476
+      ],
+      "val": [
+        5244,
+        9476
+      ],
+      "test": [
+        6553,
+        9476
+      ]
+    }
+  },
+  {
+    "name": "amazon3",
+    "kind": "real_world",
+    "train_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\real-world\\amazon3\\train_amazon3.sample",
+    "test_path": "D:\\ecole\\master 2\\recherche\\INN\\projet\\DlbacAlpha-main\\dataset\\real-world\\amazon3\\test_amazon3.sample",
+    "label_mode": "binary_access",
+    "num_ops": 1,
+    "has_train": true,
+    "npz": "D:\\ecole\\master 2\\recherche\\INN\\projet\\HyConEx_from_scratch\\data\\dlbac_prepared\\amazon3.npz",
+    "shapes": {
+      "train": [
+        20972,
+        9124
+      ],
+      "val": [
+        5244,
+        9124
+      ],
+      "test": [
+        6553,
+        9124
+      ]
+    }
+  }
+]

@@ -1,0 +1,53 @@
+SEED = 42
+RETRAIN = False          # False = reprise ; True = tout refaire
+SKIP_AMAZON = False      # True pour ignorer amazon1/2/3 (très lents)
+VERBOSE = True
+FOCUS_DATASET = None     # ex. "local/banknote" ou "u4k-r4k-auth11k"
+
+SOURCES = ["dlbac"]
+MODELS = [
+    "ruleconex",
+    "hyconex_local",
+    "hyperlogic",
+    "hyconex_hyperlogic",
+    "tabresnet_dlbac",
+    "mlp",
+    "rf",
+    "decision_tree",
+    "svm",
+]
+
+# Mode rapide (sklearn + epochs réduits) pour un premier passage
+FAST_MODE = False
+
+RESULTS_DIR = ROOT / "results" / "mega_comparison"
+
+cfg = MegaBenchmarkConfig(
+    seed=SEED,
+    retrain=RETRAIN,
+    skip_amazon=SKIP_AMAZON,
+    verbose=VERBOSE,
+    results_dir="results/mega_comparison",
+    dataset_sources=SOURCES,
+    models=MODELS,
+    focus_dataset=FOCUS_DATASET,
+    neural_epochs_dlbac=15 if FAST_MODE else 25,
+    neural_epochs_amazon=10 if FAST_MODE else 15,
+    neural_epochs_tabular=20 if FAST_MODE else 30,
+    sklearn_fast=FAST_MODE,
+    use_gpu_mlp=True,
+)
+
+all_ids = discover_all_dataset_ids(sources=SOURCES, skip_amazon=SKIP_AMAZON)
+if FOCUS_DATASET:
+    all_ids = [d for d in all_ids if d == FOCUS_DATASET or d.endswith(str(FOCUS_DATASET))]
+
+n_runs = len(all_ids) * len(MODELS)
+print(f"Jeux découverts : {len(all_ids)}")
+print(f"Modèles         : {len(MODELS)}")
+print(f"Runs totaux     : {n_runs}")
+print(f"Résultats       : {RESULTS_DIR}")
+
+unknown_models = [m for m in MODELS if m not in MODEL_RUNNERS]
+if unknown_models:
+    raise ValueError(f"Modèles invalides: {unknown_models}. Disponibles: {sorted(MODEL_RUNNERS)}")

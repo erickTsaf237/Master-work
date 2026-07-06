@@ -1,281 +1,323 @@
-# HyConEx from scratch
+# HyConEx from scratch — Explicabilité DLBAC
 
-Ce dossier contient une implémentation from-scratch d'un modèle de type HyConEx pour données tabulaires, avec:
+Implémentation **from scratch** d'architectures d'apprentissage profond pour le **contrôle d'accès basé sur le deep learning** (DLBAC), avec explications **interprétables** : règles logiques, importances locales et contrefactuels actionnables.
 
-- classification supervisée;
-- génération de contre-factuels (CF) conditionnés par une classe cible;
-- API Python simple (`import -> config -> train/fit -> evaluate`).
+Projet de recherche — mémoire de Master 2, Université de Dschang.  
+**Auteur :** TSAFACK NTEUDEM ERICK
 
-L'objectif est d'avoir un socle unique pour tester rapidement sur différents datasets (DLBaC, Iris, WDBC, etc.).
+---
 
-## 1) Architecture du modèle
+## Objectif
 
-Le coeur du modèle est défini dans `hyconex_from_scratch/model.py` (`HyConExFromScratch`).
+Les modèles DLBAC classiques (ex. **DLBACα**) offrent de bonnes performances mais restent des **boîtes noires**. Les approches récentes se spécialisent :
 
-### 1.0 Vue d'ensemble (schéma)
+| Approche | Force | Limite |
+|----------|-------|--------|
+| **HyConEx** | Contrefactuels locaux en un forward pass | Pas de règles globales |
+| **HyperLogic** | Règles IF-THEN diversifiées | Pas de contrefactuels |
+| **DLBACα** | Référence performance | Explications post-hoc |
 
-```text
-Entrée tabulaire x
-      |
-      v
-  Encoder E(.)
-      |
-      v
- latent z -----------------------> Hypernetwork H(.) -----------------> (W(z), b(z))
-      |                                                                  |
-      |                                                                  v
-      |----------------------------------------------------------> logits = W(z) z + b(z)
-      |
-      +--> concat(z, one_hot(y_target)) --> CF Generator G(.) --> delta --> x_cf = clamp(x + delta, 0, 1)
-                                                                                      |
-                                                                                      v
-                                                                              model(x_cf) -> classe cible
+Ce dépôt propose **RuleConEx** (*Rule-based Counterfactual eXplainer*), qui **unifie** ces capacités, ainsi qu'un écosystème de prototypes, baselines et benchmarks pour l'évaluation comparative.
+
+---
+
+## Contribution principale : RuleConEx
+
+**RuleConEx** (`ruleconex/`) combine en **une seule passe avant** :
+
+- classification multi-branches (HyConEx + HyperLogic + TabResNet),
+- règles IF-THEN décodables (`oh_* → ops_pattern_*`),
+- importances locales par requête,
+- contrefactuels vers les classes alternatives (mécanismes **sub** + **flip**).
+
+```mermaid
+flowchart LR
+    X["Métadonnées x"] --> RC["RuleConEx"]
+    RC --> Y["Décision d'accès"]
+    RC --> R["Règles IF-THEN"]
+    RC --> I["Importances"]
+    RC --> CF["Contrefactuels x'"]
 ```
 
-Ce flux réalise simultanément:
-
-- une classification dynamique (dépendante de l'échantillon);
-- une génération de contre-factuels dirigée vers une classe cible.
-
-### 1.1 Encodeur tabulaire
-
-Pour une entrée `x` (features tabulaires), l'encodeur apprend une représentation latente:
-
-- `z = Encoder(x)`, avec MLP + ReLU;
-- dimension latente contrôlée par `latent_dim`.
-
-Intuition: condenser l'information discriminante dans un espace latent plus compact et manipulable pour la classification et les CF.
-
-### 1.2 Hypernetwork (classifieur dynamique)
-
-Au lieu d'utiliser un classifieur fixe, le modèle génère des paramètres dépendants de `z`:
-
-- `params = Hyper(z)` puis reshape en `(num_classes, latent_dim + 1)`;
-- on obtient `W(z)` et `b(z)`;
-- logits dynamiques: `logits = W(z) · z + b(z)`.
-
-Conséquence: la frontière de décision peut s'adapter localement à chaque échantillon.
-
-### 1.3 Générateur contre-factuel conditionné
-
-Le générateur CF prend le latent `z` et une classe cible `y_target` (one-hot):
-
-- concat `[z, one_hot(y_target)]`;
-- MLP pour générer un delta `delta`;
-- `x_cf = clamp(x + delta, 0, 1)`.
-
-Le `clamp(0,1)` suppose des features normalisées dans `[0,1]` (d'où le `MinMaxScaler` dans les pipelines de données).
-
-## 2) Formulation mathématique (version compacte)
-
-Notons:
-
-- `x in R^d` une entrée;
-- `y in {0, ..., C-1}` sa classe;
-- `t` une classe cible contre-factuelle (`t != y`);
-- `E`, `H`, `G` respectivement encodeur, hypernetwork, générateur CF.
-
-### 2.1 Représentation et classification dynamique
-
-1. **Encodage latent**
-
-`z = E(x), z in R^k`
-
-2. **Paramètres du classifieur générés par l'hypernetwork**
-
-`theta(x) = H(z) -> (W(z), b(z))`
-
-avec `W(z) in R^(C x k)` et `b(z) in R^C`.
-
-3. **Logits dynamiques**
-
-`f(x) = W(z) z + b(z)` puis `p(y|x) = softmax(f(x))`.
-
-### 2.2 Génération de contre-factuel
-
-1. Encodage conditionné:
-
-`u = [z ; one_hot(t)]`
-
-2. Perturbation:
-
-`delta = G(u)`
-
-3. Contre-factuel:
-
-`x_cf = clip(x + delta, 0, 1)`
-
-Le contre-factuel est valide si `argmax f(x_cf) = t`.
-
-## 3) Fonction de coût (entraînement)
-
-Définie dans `hyconex_from_scratch/trainer.py`, la loss totale est:
-
-- `CE(x, y)` : classification standard sur l'entrée originale;
-- `CE(model(x_cf), y_target)` : contrainte de validité CF;
-- `L1(delta)` : parcimonie/proximité (petits changements);
-- `L2(delta)` : régularisation lisse.
-
-Forme:
-
-`loss = CE + cf_lambda * CE_cf + l1_lambda * L1 + l2_lambda * L2`
-
-Version explicite:
-
-`L = CE(f(x), y) + lambda_cf CE(f(x_cf), t) + lambda_1 ||x_cf - x||_1 + lambda_2 ||x_cf - x||_2^2`
-
-Les hyperparamètres `cf_lambda`, `l1_lambda`, `l2_lambda` pilotent le compromis:
-
-- plus `cf_lambda` est élevé, plus on force l'atteinte de la classe cible;
-- plus `l1_lambda`/`l2_lambda` sont élevés, plus on pénalise les grands changements.
-
-## 4) Pipeline d'entraînement complet
-
-### 4.1 Préparation des données
-
-Le pipeline standard:
-
-1. split stratifié train/val/test;
-2. normalisation MinMax (`fit` sur train, `transform` sur val/test);
-3. conversion en `float32` pour `X` et `int64` pour `y`.
-
-### 4.2 Boucle d'optimisation
-
-`HyConExTrainer.fit(...)`:
-
-1. crée le modèle avec `input_dim` + `num_classes`;
-2. échantillonne pour chaque batch une classe cible alternative `y_target`;
-3. calcule la loss composite;
-4. met à jour avec `AdamW`;
-5. suit les métriques par époque (`train_loss`, `val_accuracy`, `best_val_accuracy`).
-
-Le meilleur état (selon accuracy validation) est restauré en fin d'entraînement.
-
-### 4.3 Évaluation
-
-`HyConExTrainer.evaluate(...)` retourne:
-
-- `accuracy`;
-- `classification_report`;
-- `confusion_matrix`;
-- `auroc_ovr` (si calculable);
-- métriques CF (si `counterfactuals=True`):
-  - `validity_cf`;
-  - `proximity_l1_mean`;
-  - `changed_features_mean`.
-
-## 5) Interprétation scientifique des composantes
-
-### 5.1 Pourquoi un hypernetwork?
-
-Un classifieur linéaire fixe en latent est parfois trop rigide.  
-Ici, `H(z)` produit un classifieur local, ce qui revient à adapter la géométrie de décision à la région de l'espace latent où se trouve l'échantillon.
-
-### 5.2 Pourquoi contraindre les CF par L1/L2?
-
-- `L1` favorise des modifications concentrées sur peu de features (sparsité relative);
-- `L2` évite des perturbations extrêmes sur une seule feature et stabilise l'optimisation.
-
-Le couple `L1+L2` est un compromis standard entre parcimonie et régularité.
-
-### 5.3 Sens des métriques CF
-
-- **Validity** mesure la faisabilité algorithmique: le CF atteint-il vraiment la cible?
-- **Proximity L1** mesure le coût de recourse: combien faut-il modifier l'entrée?
-- **Changed features** approxime l'effort d'action (nombre de leviers à activer).
-
-## 6) Organisation du code
-
-- `hyconex_from_scratch/config.py`: dataclass `TrainConfig` (hyperparamètres).
-- `hyconex_from_scratch/model.py`: architecture du modèle.
-- `hyconex_from_scratch/trainer.py`: entraînement, évaluation, API haut niveau.
-- `hyconex_from_scratch/__init__.py`: exports publics.
-- `feature_engineering_wdbc.py`: feature engineering dédié WDBC.
-- `train_iris.py`: script smoke test Iris.
-- `train_hyconex_from_scratch_dlbac.py`: script complet DLBaC (avec export de fichiers de résultats).
-- `notebooks/`: notebooks d'analyse (Iris, WDBC, DLBaC report).
-
-## 7) API recommandée (simple)
-
-### Option A: API fonctionnelle
-
-```python
-from hyconex_from_scratch import TrainConfig, train
-
-cfg = TrainConfig(epochs=80, lr=2e-3, latent_dim=32, hidden_dim=64)
-res = train(
-    X_train,
-    y_train,
-    config=cfg,
-    X_val=X_val,
-    y_val=y_val,
-    X_test=X_test,
-    y_test=y_test,
-    verbose=True,
-)
-
-print(res.best_val_accuracy)
-print(res.test_metrics["accuracy"])
-```
-
-### Option B: API objet
-
-```python
-from hyconex_from_scratch import TrainConfig, HyConExTrainer
-
-trainer = HyConExTrainer(config=TrainConfig())
-result = trainer.fit(X_train, y_train, X_val=X_val, y_val=y_val)
-metrics = trainer.evaluate(X_test, y_test, counterfactuals=True)
-```
-
-## 8) Jeux de données et scripts
-
-### DLBaC (script historique)
+**Documentation détaillée :** [`ruleconex/README.md`](ruleconex/README.md)
 
 ```bash
-python train_hyconex_from_scratch_dlbac.py --epochs 20 --run-name hyconex_from_scratch
+# Entraînement rapide (GPU CUDA requis)
+python -m ruleconex.main --dataset u4k-r4k-auth11k --explain
+
+# Démonstration interactive
+jupyter notebook ruleconex/RuleConEx_Demo.ipynb
 ```
 
-Sorties principales:
+---
 
-- `results/<run-name>_metrics.json`
-- `results/<run-name>_learning_curve.csv`
-- `results/<run-name>_test_predictions.csv`
-- `results/<run-name>_counterfactuals_preview.json`
-- `results/<run-name>_counterfactuals_preview.csv`
-- `results/<run-name>_model.pt`
+## Organisation du dépôt
 
-### Iris (smoke test rapide)
+```
+HyConEx_from_scratch/
+├── ruleconex/              ★ Modèle unifié RuleConEx (contribution principale)
+├── nouveau_module/         Socle HyConEx + HyperLogic (hyperréseau TabResNet, DR-Net, CF)
+├── mega_benchmark/         Benchmark multi-jeux / multi-modèles
+├── hyconex_from_scratch/   Prototype HyConEx original (encodeur + hyperréseau + CF)
+├── hyconex_hyperlogic/     Hybride HyConEx + HyperLogic (2 phases)
+├── hyperlogic_pure/        PureDRNet — règles seules (HyperLogic)
+├── hyconex_pure_local/     HyConEx local (contrefactuels seuls)
+├── hyconex_pure_rules/     Règles pures décodées
+├── hyconex_pure_bipolar/   Variante encodage bipolaire
+├── tabresnet_dlbac/        TabResNet + instance-wise (baseline DLBAC)
+├── dlbac_alpha_baseline/   Reproduction DLBACα (ResNet)
+├── dr_cf_teacher/          Enseignant CF pour distillation
+├── data/dlbac_prepared/    Jeux DLBAC préparés (.npz, manifestes)
+├── notebooks/              Notebooks d'analyse et comparaisons
+├── docs/                   Schémas d'architecture (.dot, .md)
+├── redaction/              Rapport de mémoire, résultats LaTeX
+├── prepare_dlbac_datasets.py
+├── run_with_hyconex.ps1    Lanceur Windows (conda hyconex)
+└── train_*.py              Scripts d'entraînement par module
+```
+
+---
+
+## Modules et variantes
+
+| Module | Rôle | Script typique |
+|--------|------|----------------|
+| **`ruleconex`** | Modèle unifié règles + CF + classification | `python -m ruleconex.main` |
+| **`nouveau_module`** | HybridDRNet (HyConEx + DR-Net) | `train_nouveau_module_dlbac_quantile.py` |
+| **`hyconex_hyperlogic`** | Fusion pondérée linéaire + règles | `train_hyconex_hyperlogic_dlbac.py` |
+| **`hyconex_from_scratch`** | HyConEx minimal (Iris, WDBC, DLBAC) | `train_hyconex_from_scratch_dlbac.py` |
+| **`hyperlogic_pure`** | DR-Net / règles Monte Carlo | `train_pure_drnet_dlbac.py` |
+| **`hyconex_pure_local`** | Contrefactuels HyConEx seuls | `train_hyconex_pure_local_dlbac.py` |
+| **`tabresnet_dlbac`** | TabResNet instance-wise | `train_tabresnet_dlbac.py` |
+| **`dlbac_alpha_baseline`** | DLBACα (papier Karimi et al.) | `train_dlbac_alpha_all_datasets.py` |
+| **`mega_benchmark`** | Comparaison systématique | `python -m mega_benchmark` |
+
+---
+
+## Prérequis
+
+### Matériel & logiciel
+
+- **Python** ≥ 3.10
+- **PyTorch** avec **CUDA** (obligatoire pour les modèles neuronaux du projet)
+- **NumPy**, **scikit-learn**, **matplotlib**, **pandas** (notebooks)
+- **Jupyter** (démonstrations interactives)
+
+### Environnement Conda recommandé
 
 ```bash
-python train_iris.py
+conda create -n hyconex python=3.11 pytorch pytorch-cuda=12.1 -c pytorch -c nvidia
+conda activate hyconex
+pip install numpy scikit-learn matplotlib pandas jupyter
 ```
 
-### WDBC (notebook)
+Sous Windows, le script `run_with_hyconex.ps1` pointe vers `C:\anaconda\envs\hyconex\python.exe`.
 
-Notebook dédié:
+### Données DLBAC brutes
 
-- `notebooks/hyconex_from_scratch_wdbc_counterfactuals.ipynb`
+Les jeux synthétiques et Amazon proviennent du dépôt **DLBACα** (à placer au voisinage du projet) :
 
-avec feature engineering via:
+```
+projet/
+├── DlbacAlpha-main/dataset/   # sources .sample
+└── HyConEx_from_scratch/      # ce dépôt
+```
 
-- `feature_engineering_wdbc.py`
+---
 
-## 9) Interprétation des métriques contre-factuelles
+## Préparation des données
 
-- `validity_cf`: proportion de CF qui atteignent bien la classe cible.
-- `proximity_l1_mean`: taille moyenne de la modification (plus bas = mieux, toutes choses égales par ailleurs).
-- `changed_features_mean`: nombre moyen de features modifiées (proxy de parcimonie).
+Pipeline unifié : suppression `uid`/`rid`, masquage des métadonnées, one-hot, split train/val/test, export `.npz`.
 
-En pratique, un bon modèle CF cherche un compromis:
+```bash
+cd HyConEx_from_scratch
+python prepare_dlbac_datasets.py --all
+python prepare_dlbac_datasets.py --dataset u4k-r4k-auth11k amazon1
+```
 
-- validité élevée;
-- proximité élevée au sens "petit changement" (donc `L1` faible);
-- peu de features modifiées.
+**Sortie :** `data/dlbac_prepared/` (`*.npz`, `*.json`, `manifest.json`, cache one-hot Amazon).
 
-## 10) Bonnes pratiques
+| Type | Jeux | Classes |
+|------|------|---------|
+| Synthétiques | `u4k-r4k-auth11k`, `u5k-r5k-auth12k`, `u6k-r6k-auth32k`, … | 16 profils `ops_pattern_*` |
+| Amazon (réels) | `amazon1`, `amazon2`, `amazon3` | 2 (deny / grant) |
 
-- Toujours normaliser les features en `[0,1]` pour la stabilité du générateur CF.
-- Commencer avec `epochs` modéré (50-120) et ajuster selon la convergence.
-- Ajuster en priorité `cf_lambda`, `l1_lambda`, `l2_lambda` pour le compromis classif/CF.
-- Fixer la seed (`TrainConfig.seed`) pour des comparaisons reproductibles.
+---
+
+## Démarrage rapide
+
+### 1. RuleConEx (recommandé)
+
+```bash
+conda activate hyconex
+cd HyConEx_from_scratch
+
+python prepare_dlbac_datasets.py --dataset u4k-r4k-auth11k
+python -m ruleconex.main --dataset u4k-r4k-auth11k --epochs 30 --explain
+python ruleconex/test_ruleconex.py --dataset u4k-r4k-auth11k --epochs 5
+```
+
+### 2. Méga-benchmark comparatif
+
+Compare RuleConEx à MLP, RF, SVM, HyConEx-Local, HyperLogic, HyConEx+HyperLogic, DLBACα, TabResNet sur les 11 jeux DLBAC.
+
+```bash
+python -m mega_benchmark
+python -m mega_benchmark --focus u4k-r4k-auth11k --models ruleconex,mlp,rf
+python -m mega_benchmark --skip-amazon --retrain
+```
+
+**Résultats :** `results/mega_comparison/`  
+**Notebook :** `notebooks/mega_comparison_all_datasets.ipynb`
+
+### 3. Hybride HyConEx + HyperLogic
+
+```bash
+python train_hyconex_hyperlogic_dlbac.py --dataset u4k-r4k-auth11k --save
+python train_hyconex_hyperlogic_dlbac.py --dataset amazon1
+```
+
+### 4. Prototype HyConEx original (tabulaire général)
+
+```bash
+python train_iris.py                                    # smoke test
+python train_hyconex_from_scratch_dlbac.py --epochs 20  # DLBAC
+jupyter notebook notebooks/hyconex_from_scratch_iris_counterfactuals.ipynb
+```
+
+### 5. Nouveau module (quantiles / Amazon)
+
+```bash
+python train_nouveau_module_dlbac_quantile.py --dataset u4k-r4k-auth11k
+python train_nouveau_module_dlbac_amazon_quantile.py --dataset amazon1
+```
+
+### Lanceur Windows
+
+```powershell
+.\run_with_hyconex.ps1 -m ruleconex.main --dataset u4k-r4k-auth11k
+.\run_with_hyconex.ps1 train_hyconex_hyperlogic_dlbac.py --dataset amazon1 --save
+```
+
+---
+
+## Notebooks principaux
+
+| Notebook | Contenu |
+|----------|---------|
+| `ruleconex/RuleConEx_Demo.ipynb` | Démo complète RuleConEx (métriques, courbes, règles, CF) |
+| `notebooks/mega_comparison_all_datasets.ipynb` | Benchmark multi-modèles |
+| `notebooks/nouveau_module_dlbac_all_datasets.ipynb` | HybridDRNet sur tous les jeux |
+| `notebooks/tabresnet_dlbac_all_datasets.ipynb` | TabResNet DLBAC |
+| `notebooks/amazon_classical_baselines.ipynb` | Baselines sklearn (Amazon) |
+| `notebooks/hyconex_pure_local_dlbac_all.ipynb` | HyConEx-Local seul |
+
+---
+
+## Pipeline de données (résumé)
+
+```mermaid
+flowchart TD
+    RAW["Fichiers .sample\n(DLBACα)"] --> PREP["prepare_dlbac_datasets.py"]
+    PREP --> NPZ["data/dlbac_prepared/*.npz"]
+    NPZ --> SPLIT["Split 80/20 train-val\n+ test officiel"]
+    SPLIT --> OH["One-hot métadonnées\n+ labels joint_ops / binary"]
+    OH --> TRAIN["Entraînement\nRuleConEx / baselines"]
+```
+
+Étapes détaillées : masquage au-delà de 8 attributs user/resource, encodage one-hot ajusté sur le train, bipolarisation optionnelle, graine 42.
+
+---
+
+## Métriques d'évaluation
+
+### Classification
+
+- Accuracy, F1 macro, précision, rappel
+- AUC (jeux binaires Amazon)
+- Balanced accuracy, deny F1 (seuil grant/deny tuné)
+
+### Explicabilité RuleConEx
+
+- **Validité CF** : part des contrefactuels classés dans la classe cible
+- **Proximité L1** : distance moyenne `‖x' − x‖₁`
+- **Features modifiées** : nombre moyen de flips one-hot
+- **Règles** : score des neurones-règles, littéraux `oh_*` actifs
+
+---
+
+## Résultats et rédaction
+
+- `redaction/rapport_avancement.tex` — rapport d'avancement (méthodologie, architecture)
+- `redaction/resultats_ruleconex_mega_benchmark.tex` — tableaux comparatifs RuleConEx vs état de l'art
+- `results/mega_comparison/` — exports JSON du méga-benchmark
+- `outputs/ruleconex/` — résultats CLI RuleConEx
+
+---
+
+## Architecture RuleConEx (aperçu)
+
+Un **hyperréseau TabResNet** génère, pour chaque requête d'accès, les paramètres θ de trois branches :
+
+1. **HyConEx** — classifieur linéaire local + importances → contrefactuels par soustraction
+2. **HyperLogic** — DR-Net à règles IF-THEN, échantillonnage Monte Carlo (M train / M' inférence)
+3. **Deep** (optionnel) — TabResNet léger sur l'entrée ou le latent
+
+Fusion softmax des branches → prédiction finale.  
+Contrefactuel : `x' = 0.55·x_sub + 0.45·x_flip` (jeux `d ≤ 512`) ou soustraction seule (Amazon haute dimension).
+
+Voir [`ruleconex/README.md`](ruleconex/README.md) et `docs/nouveau_module_architecture*.dot`.
+
+---
+
+## Scripts utilitaires
+
+| Script | Usage |
+|--------|-------|
+| `show_hyconex_explanations.py` | Afficher explications HyConEx |
+| `show_hyconex_pure_rules_decoded.py` | Décoder règles IF-THEN |
+| `show_pure_drnet_explanations.py` | Explications PureDRNet |
+| `eval_cf_harmonized_dlbac.py` | Métriques CF harmonisées entre modèles |
+| `feature_engineering_amazon.py` | Feature engineering Amazon |
+
+---
+
+## Références
+
+- Karimi et al., *Deep Learning Based Access Control*, 2022 — **DLBAC / DLBACα**
+- Marszalek et al., *Hypernetwork Classifier with Counterfactual Explanations* — **HyConEx**
+- *Enhancing Diversity and Accuracy in Rule Learning with HyperNets* — **HyperLogic**
+
+---
+
+## Structure des dépendances internes
+
+```
+ruleconex
+  └── nouveau_module (hypernet, cf_head, main_rule_net)
+        └── hyconex_from_scratch (utilitaires, bipolarisation)
+
+mega_benchmark
+  └── ruleconex, hyconex_pure_local, hyperlogic_pure, hyconex_hyperlogic,
+      tabresnet_dlbac, dlbac_alpha_baseline, sklearn baselines
+```
+
+---
+
+## Licence
+
+Projet de recherche académique. Les données DLBAC sont soumises aux conditions du dépôt [DLBACα](https://github.com/). Vérifier les licences des jeux Amazon et des sources associées avant redistribution.
+
+---
+
+## Citation suggérée
+
+```bibtex
+@mastersthesis{tsafack2026ruleconex,
+  author  = {TSAFACK NTEUDEM ERICK},
+  title   = {Explicabilité du contrôle d'accès basé sur le deep learning :
+             architecture RuleConEx unifiant règles et contrefactuels},
+  school  = {Université de Dschang},
+  year    = {2026}
+}
+```

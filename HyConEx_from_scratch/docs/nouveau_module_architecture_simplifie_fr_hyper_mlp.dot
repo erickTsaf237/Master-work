@@ -1,0 +1,151 @@
+// =============================================================================
+// Meme flux que nouveau_module_architecture_simplifie_fr.dot, avec un MLP
+// empile a la place du TabResNet (variante documentaire — code actuel : TabResNet).
+//   dot -Tsvg docs/nouveau_module_architecture_simplifie_fr_hyper_mlp.dot -o ...svg
+// =============================================================================
+
+digraph G {
+    graph [
+        rankdir=TB
+        splines=spline
+        compound=true
+        clusterrank=local
+        bgcolor="#ffffff"
+        pad=0.25
+        margin=0.08
+        nodesep=0.5
+        ranksep=0.85
+        center=true
+        fontname="Arial"
+        fontsize=12
+        fontcolor="#1a1a1a"
+        label="Architecture modele hybride\nHyperLogic et HyConEx (hyper MLP)"
+        labelloc=t
+    ]
+    node [
+        fontname="Arial"
+        fontsize=10
+        fontcolor="#1a1a1a"
+        shape=box
+        style="rounded,filled"
+        fillcolor="#ffffff"
+        color="#5c5c5c"
+        penwidth=1
+    ]
+    edge [
+        fontname="Arial"
+        fontsize=9
+        fontcolor="#444444"
+        color="#4a4a4a"
+        penwidth=0.85
+        arrowsize=0.65
+    ]
+
+    entree    [fillcolor="#e8eef5" label="Entree tabulaire\n(features continues)"]
+    binarize  [fillcolor="#eef2f7" label="Binarisation\nquantiles, sortie ±1"]
+    xbin      [fillcolor="#e8eef5" label="x_bin\nrepresentation binaire du lot"]
+
+    subgraph cluster_hyper {
+        fontsize=11
+        fontname="Arial"
+        fontcolor="#1a1a1a"
+        label="Hyper-reseau : MLP puis vecteurs de poids"
+        labelloc=t
+        style="rounded,filled"
+        fillcolor="#f8f6f3"
+        color="#d4c4b8"
+        margin=20
+
+        mlp   [fillcolor="#ffffff" label="MLP ligne a ligne\nLinear / ReLU empiles"]
+        hmean [fillcolor="#ffffff" label="Moyenne sur le lot\nvecteur h"]
+        linm  [fillcolor="#f0f4fa" label="Tete principale\n(theta_main)"]
+        lincf [fillcolor="#f0f4fa" label="Tete CF\n(theta_cf)"]
+        mlp -> hmean -> linm
+        hmean -> lincf
+    }
+
+    subgraph cluster_regles {
+        fontsize=11
+        fontname="Arial"
+        fontcolor="#1a1a1a"
+        label="Tete de regles"
+        labelloc=t
+        style="rounded,filled"
+        fillcolor="#f3f8f4"
+        color="#a8c4ae"
+        margin=20
+
+        unpackm   [fillcolor="#ffffff" label="Parametres depuis theta_main"]
+        porte_and [fillcolor="#fafdf9" label="Couche AND"]
+        porte_or  [fillcolor="#fafdf9" label="Couche OR"]
+        logits    [fillcolor="#e8eef5" label="Logits (prediction)"]
+        unpackm -> porte_and -> porte_or -> logits
+    }
+
+    subgraph cluster_cf {
+        fontsize=11
+        fontname="Arial"
+        fontcolor="#1a1a1a"
+        label="Tete de contre-factuelles"
+        labelloc=t
+        style="rounded,filled"
+        fillcolor="#f8f5fb"
+        color="#c4b8d4"
+        margin=20
+
+        y       [fillcolor="#f0ecf8" label="Classe cible (one-hot)"]
+        unpackc [fillcolor="#ffffff" label="Parametres depuis theta_cf"]
+        concat  [fillcolor="#ffffff" label="Concatenation x_bin | classe"]
+        mlpcf   [fillcolor="#ffffff" label="MLP, sigmoide, straight-through"]
+        xcf     [fillcolor="#e8eef5" label="x_cf (binaire ±1)"]
+        { rank=same; y; unpackc }
+        unpackc -> concat -> mlpcf -> xcf
+        y -> concat
+    }
+
+    subgraph cluster_evalcf {
+        fontsize=11
+        fontname="Arial"
+        fontcolor="#1a1a1a"
+        label="Prediction sur le contre-exemple"
+        labelloc=t
+        style="rounded,filled"
+        fillcolor="#fafafa"
+        color="#b0b0b0"
+        margin=18
+
+        chainecf [fillcolor="#ffffff" label="Memes regles que ci-dessus\nmeme theta_main, entree x_cf"]
+        logitscf [fillcolor="#e8eef5" label="Logits CF"]
+        chainecf -> logitscf
+    }
+
+    subgraph cluster_loss {
+        fontsize=11
+        fontname="Arial"
+        fontcolor="#1a1a1a"
+        label="Criteres d'apprentissage"
+        labelloc=t
+        style="rounded,filled"
+        fillcolor="#fafafa"
+        color="#b0b0b0"
+        margin=16
+
+        lsum [fillcolor="#ffffff" style="rounded,filled,dashed" color="#888888"
+              label="Entropies croisees (principal + CF)\npenalite de flips, parcimonie des regles"]
+    }
+
+    entree -> binarize -> xbin
+    xbin -> mlp [lhead=cluster_hyper label=" " minlen=2]
+
+    linm  -> unpackm [ltail=cluster_hyper lhead=cluster_regles label="theta_main" fontcolor="#0d47a1" color="#1565c0" penwidth=1.1 minlen=2]
+    xbin  -> unpackm [lhead=cluster_regles label="x_bin" color="#666666" penwidth=0.75 constraint=true]
+
+    lincf -> unpackc [ltail=cluster_hyper lhead=cluster_cf label="theta_cf" fontcolor="#4a148c" color="#6a1b9a" penwidth=1.1 minlen=2]
+    xbin  -> concat   [lhead=cluster_cf label="x_bin" color="#666666" penwidth=0.75 constraint=true]
+
+    xcf   -> chainecf [ltail=cluster_cf lhead=cluster_evalcf minlen=2]
+    unpackm -> chainecf [ltail=cluster_regles lhead=cluster_evalcf style=dashed color="#757575" label="theta_main" minlen=2]
+
+    logits   -> lsum [ltail=cluster_regles lhead=cluster_loss color="#2e7d32" penwidth=0.75 minlen=2]
+    logitscf -> lsum [ltail=cluster_evalcf lhead=cluster_loss color="#1565c0" penwidth=0.75 minlen=2]
+}

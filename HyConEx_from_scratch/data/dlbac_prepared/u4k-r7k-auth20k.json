@@ -1,0 +1,39 @@
+{
+  "name": "u4k-r7k-auth20k",
+  "kind": "synthetic",
+  "label_mode": "joint_ops",
+  "num_features": 152,
+  "num_classes": 16,
+  "class_names": [
+    "ops_pattern_0",
+    "ops_pattern_1",
+    "ops_pattern_2",
+    "ops_pattern_3",
+    "ops_pattern_4",
+    "ops_pattern_5",
+    "ops_pattern_6",
+    "ops_pattern_7",
+    "ops_pattern_8",
+    "ops_pattern_9",
+    "ops_pattern_10",
+    "ops_pattern_11",
+    "ops_pattern_12",
+    "ops_pattern_13",
+    "ops_pattern_14",
+    "ops_pattern_15"
+  ],
+  "shapes": {
+    "train": [
+      12821,
+      152
+    ],
+    "val": [
+      3206,
+      152
+    ],
+    "test": [
+      4006,
+      152
+    ]
+  }
+}

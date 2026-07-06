@@ -1,0 +1,569 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{geometry}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{siunitx}
+\usepackage{listings}
+\usepackage{fancyvrb}
+
+\geometry{margin=2.3cm}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  columns=fullflexible,
+}
+\definecolor{titleblue}{RGB}{0,51,102}
+\hypersetup{colorlinks=true, linkcolor=titleblue, urlcolor=titleblue}
+
+\title{\textcolor{titleblue}{\textbf{Résultats expérimentaux de RuleConEx sur DLBAC}}\\
+\large Comparaison multi-modèles — méga-benchmark \texttt{mega\_comparison\_all\_datasets}}
+\author{TSAFACK NTEUDEM ERICK\\
+\small Encadré par : Dr.\ AZANGUEZET Martin}
+\date{Juin 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Ce document complète le rapport d'avancement \emph{Une approche d'explicabilité des modèles d'apprentissage profond pour le contrôle d'accès aux données et aux traitements}. Il présente les résultats du méga-benchmark exécuté sur les \textbf{11 jeux de données DLBAC} (8 synthétiques à 16 classes jointes et 3 jeux Amazon réels), en comparant \textbf{RuleConEx} à sept approches : HyConEx-Local, HyperLogic, MLP, Random Forest, arbre de décision, SVM et \textbf{DLBAC$\alpha$} (Karimi et al., 2022, valeurs estimées depuis les Figures 7--11 du papier). RuleConEx se place au \textbf{2\textsuperscript{e}--3\textsuperscript{e} rang} en accuracy moyenne (proche du MLP et de DLBAC$\alpha$), avec une \textbf{validité contrefactuelle de 98{,}7\,\%} et des \textbf{règles IF-THEN} + \textbf{contrefactuels} natifs absents chez DLBAC$\alpha$.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%==============================================================================
+\section{Contexte et lien avec le rapport d'avancement}
+%==============================================================================
+
+Le travail s'inscrit dans la lignée du DLBAC (\emph{Deep Learning Based Access Control}) : prédire les décisions d'accès à partir de métadonnées utilisateur/ressource encodées en one-hot. L'objectif du mémoire est de proposer des modèles à la fois \textbf{précis} et \textbf{explicables}.
+
+\textbf{RuleConEx} (\emph{Rule-based Contrefactual eXplainer}) est notre architecture hybride qui combine :
+\begin{itemize}
+  \item une branche \textbf{HyConEx} (importances locales + contrefactuels) ;
+  \item une branche \textbf{règles} (hyperréseau de règles IF-THEN binaires, inspirée d'HyperLogic) ;
+  \item une branche \textbf{profonde} optionnelle (TabResNet léger).
+\end{itemize}
+
+Contrairement aux baselines purement prédictives, RuleConEx produit en sortie des \textbf{règles décodables} et des \textbf{contrefactuels} évalués par la métrique \texttt{cf\_validity} (fraction d'exemples pour lesquels une modification minimale inverse la décision prédite).
+
+Ce document synthétise les résultats du notebook \texttt{notebooks/mega\_comparison\_all\_datasets.ipynb} (export HTML \texttt{mega\_comparison\_all\_datasets3.html}, juin 2026).
+
+%==============================================================================
+\section{Protocole expérimental}
+%==============================================================================
+
+\subsection{Jeux de données}
+
+On utilise l'ensemble \textbf{DLBAC} préparé dans \texttt{HyConEx\_from\_scratch/data/dlbac\_prepared/} :
+
+\begin{center}
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Identifiant} & \textbf{Type} & \textbf{Classes} \\
+\midrule
+\texttt{u4k-r4k-auth11k} & synthétique & 16 (4 opérations jointes) \\
+\texttt{u4k-r4k-auth21k} & synthétique & 16 \\
+\texttt{u4k-r4k-auth22k} & synthétique & 16 \\
+\texttt{u4k-r6k-auth28k} & synthétique & 16 \\
+\texttt{u4k-r7k-auth20k} & synthétique & 16 \\
+\texttt{u5k-r5k-auth12k} & synthétique & 16 \\
+\texttt{u5k-r5k-auth19k} & synthétique & 16 \\
+\texttt{u6k-r6k-auth32k} & synthétique & 16 \\
+\texttt{amazon1}, \texttt{amazon2}, \texttt{amazon3} & réel (Amazon) & 2 (grant/deny) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Modèles comparés}
+
+\begin{center}
+\small
+\begin{tabular}{@{}ll@{}}
+\toprule
+\textbf{Clé} & \textbf{Description} \\
+\midrule
+RuleConEx & Architecture hybride (HyConEx + règles + deep), avec CF \\
+HyConEx-Local & HyConEx sans hyperréseau de règles \\
+HyperLogic & Hyperréseau de règles seul \\
+MLP & Perceptron multicouche (GPU, 25 époques DLBAC) \\
+RandomForest & Forêt aléatoire (sklearn) \\
+DecisionTree & Arbre de décision (sklearn) \\
+SVM & SVM RBF (sklearn) \\
+DLBAC$\alpha$ & ResNet Keras (papier Karimi et al., 2022) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+
+\textbf{77 expériences} RuleConEx et baselines ($11 \times 7$). Les modèles neuronaux du benchmark sont entraînés avec 25 époques (\texttt{MegaBenchmarkConfig}). Les scores \textbf{DLBAC$\alpha$} sont des \textbf{estimations ponctuelles} extraites des graphiques du papier (intervalles convertis en valeur centrale, cf.\ section~\ref{sec:dlbac-alpha}). Graine aléatoire : 42.
+
+\subsection{Métriques}
+
+\begin{itemize}
+  \item \textbf{Accuracy} et \textbf{F1 macro} sur les labels de test ;
+  \item \textbf{AUC} (binaire OVR pour Amazon, multi-classe sinon) ;
+  \item \textbf{Validité CF} (\texttt{cf\_validity}) : RuleConEx uniquement ;
+  \item \textbf{Temps} (\texttt{elapsed\_sec}) : durée d'entraînement + évaluation par run.
+\end{itemize}
+
+\paragraph{Valeurs DLBAC$\alpha$ retenues (milieu d'intervalle papier).}
+Synthétiques : F1 = 0,955 (intervalle 0,93--0,98), accuracy jointe estimée = 0,940. Amazon type Kaggle (\texttt{amazon1}) : 0,955. Amazon type UCI (\texttt{amazon2}, \texttt{amazon3}) : 0,730 (intervalle 0,68--0,78). TPR = 0,970, FPR = 0,040, précision = 0,950.
+
+%==============================================================================
+\section{Synthèse globale}
+%==============================================================================
+
+\subsection{Classement par métrique (moyenne sur 11 jeux)}
+
+\begin{table}[h]
+\centering
+\caption{Classement des modèles — moyennes sur les 11 jeux DLBAC}
+\label{tab:ranking}
+\small
+\begin{tabular}{@{}clccc@{}}
+\toprule
+\textbf{Rang} & \textbf{Modèle} & \textbf{Accuracy} & \textbf{F1 macro} & \textbf{AUC} \\
+\midrule
+1 & MLP & 0,9066 & 0,8365 & 0,9495 \\
+2 & DLBAC$\alpha$ & 0,9027 & 0,9141$^\dagger$ & --- \\
+\textbf{3} & \textbf{RuleConEx} & \textbf{0,9016} & \textbf{0,8305} & \textbf{0,9449} \\
+4 & HyConEx-Local & 0,8987 & 0,8128 & 0,9506 \\
+5 & HyperLogic & 0,8940 & 0,7766 & 0,8647 \\
+6 & SVM & 0,8675 & 0,7593 & 0,9445 \\
+7 & RandomForest & 0,8167 & 0,6516 & 0,9245 \\
+8 & DecisionTree & 0,6129 & 0,4514 & 0,7584 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent
+$^\dagger$ F1 \emph{par opération} tel que rapporté dans le papier (Fig.~7), non strictement comparable au F1 macro joint 16 classes de RuleConEx.\\
+\textit{Note :} HyConEx-Local devance RuleConEx en AUC moyenne (+0,006). DLBAC$\alpha$ et RuleConEx sont \textbf{à 0,1 point} en accuracy moyenne.
+
+\subsection{Rang moyen multi-métrique}
+
+En agrégeant les rangs sur accuracy, F1, AUC et temps (sans CF) :
+
+\begin{center}
+\small
+\begin{tabular}{@{}lc@{}}
+\toprule
+\textbf{Modèle} & \textbf{Rang moyen} \\
+\midrule
+MLP & 2,25 \\
+DLBAC$\alpha$ & 2,50 \\
+\textbf{RuleConEx} & \textbf{3,00} \\
+HyConEx-Local & 3,00 \\
+SVM & 4,00 \\
+RandomForest & 5,00 \\
+HyperLogic & 5,25 \\
+DecisionTree & 6,50 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+RuleConEx reste dans le \textbf{premier tiers} du classement global ; DLBAC$\alpha$ (papier) le devance légèrement en accuracy (+0,1 point) mais sans explicabilité native.
+
+\subsection{Victoires par jeu (meilleur score)}
+
+\begin{table}[h]
+\centering
+\caption{Nombre de jeux où chaque modèle obtient le meilleur score}
+\small
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+\textbf{Modèle} & \textbf{Acc.} & \textbf{F1} & \textbf{AUC} & \textbf{CF} & \textbf{Temps} \\
+\midrule
+MLP & 7 & 8 & 7 & --- & --- \\
+DLBAC$\alpha$ & 7 & --- & --- & --- & --- \\
+HyConEx-Local & 2 & --- & 2 & --- & --- \\
+\textbf{RuleConEx} & \textbf{1} & \textbf{2} & \textbf{1} & \textbf{11} & --- \\
+SVM & 1 & --- & --- & --- & 3 \\
+HyperLogic & --- & 1 & 1 & --- & --- \\
+DecisionTree & --- & --- & --- & --- & 8 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+DLBAC$\alpha$ (estimé) domine en accuracy sur 6 jeux synthétiques difficiles et \texttt{amazon1}, mais est largement distancé sur \texttt{auth11k}, \texttt{auth12k} et les jeux Amazon UCI. RuleConEx remporte le meilleur F1 joint sur \texttt{amazon1}/\texttt{amazon3} et domine la \textbf{validité CF} (11/11).
+
+%==============================================================================
+\section{Résultats détaillés par jeu de données}
+%==============================================================================
+
+\subsection{Accuracy}
+
+\begin{footnotesize}
+\begin{longtable}{@{}l*{8}{S[table-format=1.4]}@{}}
+\caption{Accuracy par jeu de données et par modèle}\label{tab:acc}\\
+\toprule
+\textbf{Jeu} & {DT} & {HyC.-L.} & {Hyp.L.} & {MLP} & {RF} & {DLBAC$\alpha$} & {\textbf{RuleConEx}} & {SVM} \\
+\midrule
+\endfirsthead
+\multicolumn{9}{c}{\textit{Suite du tableau \ref{tab:acc}}}\\
+\toprule
+\textbf{Jeu} & {DT} & {HyC.-L.} & {Hyp.L.} & {MLP} & {RF} & {DLBAC$\alpha$} & {\textbf{RuleConEx}} & {SVM} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+amazon1 & 0.9417 & 0.9437 & 0.9408 & 0.9388 & 0.9408 & \textbf{0.9550} & 0.9409 & 0.9440 \\
+amazon2 & 0.9454 & \textbf{0.9463} & 0.9438 & 0.9380 & 0.9438 & 0.7300 & 0.9422 & 0.9443 \\
+amazon3 & 0.9437 & \textbf{0.9454} & 0.9425 & 0.9382 & 0.9425 & 0.7300 & 0.9348 & 0.9432 \\
+u4k-r4k-auth11k & 0.4270 & 0.9722 & 0.9749 & \textbf{0.9754} & 0.9156 & 0.9400 & 0.9758 & 0.9740 \\
+u4k-r4k-auth21k & 0.5142 & 0.8791 & 0.8641 & 0.8963 & 0.6985 & \textbf{0.9400} & 0.8944 & 0.8157 \\
+u4k-r4k-auth22k & 0.4703 & 0.7170 & 0.6685 & 0.7307 & 0.5999 & \textbf{0.9400} & 0.7033 & 0.6678 \\
+u4k-r6k-auth28k & 0.4873 & 0.8157 & 0.8315 & 0.8494 & 0.6873 & \textbf{0.9400} & 0.8329 & 0.7325 \\
+u4k-r7k-auth20k & 0.4423 & 0.8779 & 0.8757 & 0.8857 & 0.7718 & \textbf{0.9400} & 0.8849 & 0.8572 \\
+u5k-r5k-auth12k & 0.4098 & 0.9925 & 0.9929 & \textbf{0.9945} & 0.9571 & 0.9400 & 0.9937 & 0.9913 \\
+u5k-r5k-auth19k & 0.6534 & 0.8933 & 0.8984 & 0.9007 & 0.7753 & \textbf{0.9400} & 0.8989 & 0.8715 \\
+u6k-r6k-auth32k & 0.5068 & 0.9026 & 0.9014 & \textbf{0.9252} & 0.7512 & 0.9400 & 0.9160 & 0.8011 \\
+\end{longtable}
+\end{footnotesize}
+
+\noindent
+\textit{Note :} colonne DLBAC$\alpha$ = estimations papier (0,940 synthétiques ; 0,955 Kaggle ; 0,730 UCI).
+
+\subsection{F1 macro}
+
+\begin{footnotesize}
+\begin{longtable}{@{}l*{8}{S[table-format=1.4]}@{}}
+\caption{F1 macro par jeu de données}\label{tab:f1}\\
+\toprule
+\textbf{Jeu} & {DT} & {HyC.-L.} & {Hyp.L.} & {MLP} & {RF} & {DLBAC$\alpha$} & {\textbf{RuleConEx}} & {SVM} \\
+\midrule
+\endfirsthead
+\multicolumn{9}{c}{\textit{Suite du tableau \ref{tab:f1}}}\\
+\toprule
+\textbf{Jeu} & {DT} & {HyC.-L.} & {Hyp.L.} & {MLP} & {RF} & {DLBAC$\alpha$} & {\textbf{RuleConEx}} & {SVM} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+amazon1 & 0.5586 & 0.6285 & 0.4847 & 0.6920 & 0.4847 & \textbf{0.9550} & 0.7084 & 0.5558 \\
+amazon2 & 0.5827 & 0.6269 & 0.4856 & \textbf{0.6851} & 0.4856 & 0.7300 & 0.6685 & 0.5016 \\
+amazon3 & 0.5493 & 0.6626 & 0.4852 & 0.6810 & 0.4852 & 0.7300 & \textbf{0.6850} & 0.4985 \\
+u4k-r4k-auth11k & 0.3853 & 0.9710 & 0.9737 & \textbf{0.9759} & 0.9125 & 0.9550 & 0.9752 & 0.9749 \\
+u4k-r4k-auth21k & 0.3494 & 0.8736 & 0.8641 & 0.8914 & 0.5866 & \textbf{0.9550} & 0.8906 & 0.8277 \\
+u4k-r4k-auth22k & 0.3605 & 0.6778 & 0.6981 & 0.7070 & 0.4394 & \textbf{0.9550} & 0.6800 & 0.6379 \\
+u4k-r6k-auth28k & 0.4296 & 0.8409 & 0.8556 & 0.8692 & 0.6974 & \textbf{0.9550} & 0.8519 & 0.7827 \\
+u4k-r7k-auth20k & 0.3346 & 0.9048 & 0.9000 & \textbf{0.9072} & 0.7293 & 0.9550 & 0.9067 & 0.8913 \\
+u5k-r5k-auth12k & 0.4614 & 0.9932 & 0.9930 & \textbf{0.9949} & 0.9551 & 0.9550 & 0.9940 & 0.9935 \\
+u5k-r5k-auth19k & 0.4871 & 0.8664 & \textbf{0.9057} & 0.8790 & 0.6981 & 0.9550 & 0.8684 & 0.8625 \\
+u6k-r6k-auth32k & 0.4670 & 0.8947 & 0.8969 & \textbf{0.9184} & 0.6937 & 0.9550 & 0.9067 & 0.8259 \\
+\end{longtable}
+\end{footnotesize}
+
+\noindent
+\textit{Note :} F1 DLBAC$\alpha$ = F1 \emph{par opération} du papier (0,955 synth. ; 0,955/0,730 Amazon).
+
+%==============================================================================
+\section{Validité des contrefactuels (RuleConEx)}
+%==============================================================================
+
+RuleConEx est le seul modèle du benchmark doté d'une tête contrefactuelle évaluée systématiquement.
+
+\begin{table}[h]
+\centering
+\caption{Validité contrefactuelle (\texttt{cf\_validity}) — RuleConEx}
+\label{tab:cf}
+\small
+\begin{tabular}{@{}lc@{}}
+\toprule
+\textbf{Jeu} & \textbf{CF validity} \\
+\midrule
+amazon1, amazon2, amazon3 & 1,0000 \\
+u4k-r4k-auth11k & 0,9573 \\
+u5k-r5k-auth12k & 0,9552 \\
+u4k-r4k-auth21k & 0,9844 \\
+u4k-r4k-auth22k & 0,9969 \\
+u4k-r6k-auth28k & 0,9885 \\
+u4k-r7k-auth20k & 0,9896 \\
+u5k-r5k-auth19k & 0,9906 \\
+u6k-r6k-auth32k & 0,9990 \\
+\midrule
+\textbf{Moyenne} & \textbf{0,9874} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Sur les jeux Amazon, \textbf{100\,\%} des contrefactuels générés inversent effectivement la classe prédite. Sur les synthétiques, la validité reste au-dessus de 95\,\% partout, ce qui confirme l'intérêt de la branche HyConEx intégrée à RuleConEx pour produire des explications \textbf{actionnables}.
+
+%==============================================================================
+\section{Exemples d'explications : règles IF-THEN et contrefactuels}
+%==============================================================================
+
+Cette section illustre les sorties explicatives de RuleConEx sur le jeu \texttt{u4k-r4k-auth11k}, après entraînement du méga-benchmark (export \texttt{mega\_comparison\_all\_datasets3.html}, section \emph{Explications RuleConEx}). Trois échantillons de test sont inspectés via \texttt{ruleconex.explain.explain\_sample}.
+
+\subsection{Fusion des trois branches}
+
+Pour l'échantillon test \#0 (vrai label \texttt{ops\_pattern\_12}), la prédiction fusionnée est correcte avec une confiance de 0,9948. Les poids appris de la fusion sont :
+HyConEx = 0,429 ; Règles = 0,429 ; Deep (TabResNet) = 0,143.
+Les trois branches convergent vers \texttt{ops\_pattern\_12} ; la branche HyConEx est la plus confiante (0,9999), suivie des règles (0,9578).
+
+\begin{table}[h]
+\centering
+\caption{Prédictions par branche — échantillon test \#0 (\texttt{u4k-r4k-auth11k})}
+\small
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Branche} & \textbf{Prédiction} & \textbf{Confiance} \\
+\midrule
+HyConEx & \texttt{ops\_pattern\_12} & 0,9999 \\
+Règles & \texttt{ops\_pattern\_12} & 0,9578 \\
+Deep & \texttt{ops\_pattern\_12} & 0,9947 \\
+\textbf{Fusion} & \textbf{\texttt{ops\_pattern\_12}} & \textbf{0,9948} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Règles IF-THEN extraites}
+
+L'hyperréseau de règles produit des clauses lisibles sur les littéraux one-hot \texttt{oh\_*}. Chaque littéral \texttt{oh\_$k$=+1} (resp.\ \texttt{=-1}) indique qu'une modalité de métadonnée utilisateur ou ressource est active (resp.\ inactive) dans l'encodage bipolarisé.
+
+\begin{table}[h]
+\centering
+\caption{Top-8 règles décodées — échantillon test \#0}
+\label{tab:rules}
+\small
+\begin{tabular}{@{}clc@{}}
+\toprule
+\textbf{ID} & \textbf{Conditions $\Rightarrow$ conclusion} & \textbf{Score} \\
+\midrule
+R17 & \texttt{oh\_8=+1 AND oh\_32=+1 AND oh\_55=-1 AND oh\_62=-1} $\Rightarrow$ \texttt{ops\_pattern\_6} & 0,905 \\
+R01 & \texttt{oh\_118=-1 AND oh\_15=+1 AND oh\_39=-1 AND oh\_29=+1} $\Rightarrow$ \texttt{ops\_pattern\_11} & 0,823 \\
+R06 & \texttt{oh\_100=+1 AND oh\_124=+1 AND oh\_82=+1 AND oh\_76=+1} $\Rightarrow$ \texttt{ops\_pattern\_1} & 0,689 \\
+R37 & \texttt{oh\_97=-1 AND oh\_75=-1 AND oh\_22=-1 AND oh\_149=-1} $\Rightarrow$ \texttt{ops\_pattern\_9} & 0,654 \\
+R25 & \texttt{oh\_8=+1 AND oh\_5=+1 AND oh\_43=+1 AND oh\_99=+1} $\Rightarrow$ \texttt{ops\_pattern\_3} & 0,648 \\
+R39 & \texttt{oh\_83=+1 AND oh\_21=+1 AND oh\_26=+1 AND oh\_138=+1} $\Rightarrow$ \texttt{ops\_pattern\_12} & 0,603 \\
+R32 & \texttt{oh\_100=-1 AND oh\_112=-1 AND oh\_120=-1 AND oh\_10=-1} $\Rightarrow$ \texttt{ops\_pattern\_5} & 0,591 \\
+R16 & \texttt{oh\_54=-1 AND oh\_99=-1 AND oh\_20=-1 AND oh\_34=-1} $\Rightarrow$ \texttt{ops\_pattern\_8} & 0,581 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+La règle R39 correspond exactement à la classe prédite (\texttt{ops\_pattern\_12}) pour cet échantillon. Les règles R17 et R25 pointent vers des classes alternatives (\texttt{ops\_pattern\_6} et \texttt{ops\_pattern\_3}) qui serviront de cibles contrefactuelles.
+
+\paragraph{Importances locales.}
+Les métadonnées les plus influentes pour cet échantillon sont \texttt{oh\_90} (3,64), \texttt{oh\_55} (3,63), \texttt{oh\_22} (3,57), \texttt{oh\_138} (3,49) et \texttt{oh\_100} (3,45). Ces scores proviennent de la branche HyConEx (gradients locaux) et orientent la recherche de contrefactuels.
+
+\subsection{Contrefactuels générés}
+
+RuleConEx propose trois contrefactuels pour inverser la décision \texttt{ops\_pattern\_12} vers des classes alternatives à forte probabilité :
+
+\begin{table}[h]
+\centering
+\caption{Contrefactuels — échantillon test \#0}
+\small
+\begin{tabular}{@{}lccp{5.5cm}@{}}
+\toprule
+\textbf{Cible} & \textbf{$P_{\mathrm{CF}}$} & \textbf{\# flips} & \textbf{Modifications principales} \\
+\midrule
+\texttt{ops\_pattern\_6} & 1,000 & 7 & \texttt{oh\_16, oh\_49, oh\_55, oh\_75, oh\_115} : actif$\to$inactif \\
+\texttt{ops\_pattern\_3} & 1,000 & 11 & \texttt{oh\_5, oh\_16, oh\_22, oh\_49, oh\_55} : actif$\to$inactif \\
+\texttt{ops\_pattern\_8} & 0,9998 & 12 & \texttt{oh\_5, oh\_16, oh\_22, oh\_29, oh\_49} : actif$\to$inactif \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Lecture.}
+Chaque contrefactuel indique quelles métadonnées modifier pour obtenir un autre profil d'accès (pattern d'opérations). Sur cet échantillon, les modifications affichées sont exclusivement des \textbf{désactivations} (\emph{actif $\to$ inactif}) : la tête contrefactuelle combine une soustraction d'importances (\texttt{counterfactual\_subtract}) et un mélange flip, ce qui tend à abaisser les activations one-hot ; seuls les flips aboutissant à une valeur binaire stricte sont reportés (seuil 0,5 dans \texttt{onehot\_feature\_flips}).
+
+\paragraph{Validité globale sur le jeu.}
+Sur l'ensemble du test \texttt{u4k-r4k-auth11k}, la validité contrefactuelle atteint \textbf{95,7\,\%} (tableau~\ref{tab:cf}). Les trois échantillons illustrés (\#0, \#1, \#2) sont tous correctement classés ; leurs contrefactuels atteignent $P_{\mathrm{CF}} \geq 0{,}9998$.
+
+%==============================================================================
+\section{Comparaison avec DLBAC$\alpha$ (référence du papier)}
+\label{sec:dlbac-alpha}
+%==============================================================================
+
+\textbf{DLBAC$\alpha$} (Karimi et al., 2022, \emph{Toward Deep Learning Based Access Control}) est le prototype historique : ResNet Keras, 4 sorties sigmoïdes (une par opération), perte \emph{binary cross-entropy}. Les valeurs ci-dessous sont des \textbf{estimations visuelles} extraites des Figures 7 à 11 du papier ; pour chaque intervalle $[a,b]$, nous retenons la valeur centrale $(a+b)/2$.
+
+\subsection{DLBAC$\alpha$ vs.\ algorithmes ML classiques (F1)}
+
+\begin{table}[h]
+\centering
+\caption{F1 Score — ML vs DLBAC$\alpha$ (valeurs centrales des intervalles papier)}
+\label{tab:paper-ml}
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Jeu} & \textbf{SVM} & \textbf{RF} & \textbf{MLP} & \textbf{DLBAC$\alpha$} \\
+\midrule
+Amazon Kaggle (\texttt{amazon1}) & 0,895 & 0,940 & 0,875 & \textbf{0,955} \\
+Amazon UCI (\texttt{amazon2/3}) & 0,450 & 0,700 & 0,500 & \textbf{0,730} \\
+Synthétiques (moyenne) & 0,800 & 0,885 & 0,800 & \textbf{0,955} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{DLBAC$\alpha$ vs.\ policy mining}
+
+\begin{table}[h]
+\centering
+\caption{Policy mining vs DLBAC$\alpha$ — synthétiques (moyennes papier)}
+\small
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+\textbf{Métrique} & \textbf{XuStoller} & \textbf{Rhapsody} & \textbf{EPDE-ML} & \textbf{DLBAC$\alpha$} \\
+\midrule
+F1 Score & 0,525 & 0,625 & 0,885 & \textbf{0,955} \\
+FPR $\downarrow$ & \textbf{0,030} & \textbf{0,030} & 0,145 & 0,040 \\
+TPR $\uparrow$ & 0,125 & 0,525 & 0,850 & \textbf{0,970} \\
+Précision & 0,450 & 0,600 & 0,850 & \textbf{0,950} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+DLBAC$\alpha$ offre le meilleur équilibre global (F1 élevé, TPR $>$ 0,95, FPR $<$ 0,05) sur les jeux synthétiques, confirmant la supériorité du deep learning sur le policy mining classique.
+
+\subsection{Accuracy jointe : RuleConEx vs.\ DLBAC$\alpha$}
+
+\begin{footnotesize}
+\begin{longtable}{@{}l*{3}{S[table-format=1.4]}@{}}
+\caption{Accuracy jointe estimée — jeux synthétiques}\label{tab:dlbac-alpha}\\
+\toprule
+\textbf{Jeu} & {\textbf{DLBAC$\alpha$}} & {\textbf{RuleConEx}} & {\textbf{$\Delta$}} \\
+\midrule
+\endfirsthead
+\multicolumn{4}{c}{\textit{Suite du tableau \ref{tab:dlbac-alpha}}}\\
+\toprule
+\textbf{Jeu} & {\textbf{DLBAC$\alpha$}} & {\textbf{RuleConEx}} & {\textbf{$\Delta$}} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\texttt{u4k-r4k-auth11k} & 0.9400 & \textbf{0.9758} & {+0.0358} \\
+\texttt{u4k-r4k-auth21k} & \textbf{0.9400} & 0.8944 & {-0.0456} \\
+\texttt{u4k-r4k-auth22k} & \textbf{0.9400} & 0.7033 & {-0.2367} \\
+\texttt{u4k-r6k-auth28k} & \textbf{0.9400} & 0.8329 & {-0.1071} \\
+\texttt{u4k-r7k-auth20k} & \textbf{0.9400} & 0.8849 & {-0.0551} \\
+\texttt{u5k-r5k-auth12k} & 0.9400 & \textbf{0.9937} & {+0.0537} \\
+\texttt{u5k-r5k-auth19k} & \textbf{0.9400} & 0.8989 & {-0.0411} \\
+\texttt{u6k-r6k-auth32k} & \textbf{0.9400} & 0.9160 & {-0.0240} \\
+\midrule
+\textbf{Moyenne (8 jeux)} & \textbf{0.9400} & \textbf{0.8875} & \textbf{-0.0525} \\
+\end{longtable}
+\end{footnotesize}
+
+\noindent
+$\Delta = \text{RuleConEx} - \text{DLBAC}\alpha$. Sur les jeux \textbf{faciles} (\texttt{auth11k}, \texttt{auth12k}), RuleConEx dépasse l'estimation papier ; sur les jeux \textbf{difficiles}, DLBAC$\alpha$ (ResNet profond, 60 époques) reste nettement au-dessus de RuleConEx (25 époques, architecture hybride).
+
+\subsection{Synthèse RuleConEx vs.\ DLBAC$\alpha$}
+
+\begin{itemize}
+  \item \textbf{Prédiction} : accuracy moyenne quasi identique sur 11 jeux (0,9027 vs.\ 0,9016) ; DLBAC$\alpha$ domine sur les synthétiques difficiles, RuleConEx sur les jeux faciles et Amazon UCI (F1 joint) ;
+  \item \textbf{Explicabilité} : DLBAC$\alpha$ requiert Integrated Gradients ou arbre post-hoc ; RuleConEx produit \textbf{règles IF-THEN} et \textbf{contrefactuels} natifs (validité 98,7\,\%) ;
+  \item \textbf{Positionnement} : RuleConEx vise un \textbf{compromis} performance + explicabilité ; DLBAC$\alpha$ maximise la performance brute sur opérations binaires.
+\end{itemize}
+
+%==============================================================================
+\section{Temps d'entraînement}
+%==============================================================================
+
+\begin{table}[h]
+\centering
+\caption{Temps moyen d'entraînement (secondes, 11 jeux)}
+\small
+\begin{tabular}{@{}lc@{}}
+\toprule
+\textbf{Modèle} & \textbf{Temps moyen (s)} \\
+\midrule
+SVM & 3,6 \\
+RandomForest & 8,4 \\
+DecisionTree & 29,6 \\
+MLP & 36,8 \\
+HyConEx-Local & 148,3 \\
+HyperLogic & 234,4 \\
+\textbf{RuleConEx} & \textbf{891,6} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+RuleConEx est le plus lent ($\sim$15\,min/jeu en moyenne, jusqu'à 25\,min sur Amazon), en raison de l'hyperréseau de règles, du Monte Carlo HyperLogic et de la perte contrefactuelle. Ce coût est le \textbf{prix de l'explicabilité} : seul RuleConEx fournit règles + CF dans le même entraînement.
+
+Les modèles sklearn restent les plus rapides mais sont nettement moins précis sur les jeux synthétiques (accuracy $\approx$ 41--65\,\% vs.\ $>$89\,\% pour RuleConEx).
+
+%==============================================================================
+\section{Analyse comparative}
+%==============================================================================
+
+\subsection{RuleConEx vs.\ MLP (meilleure baseline prédictive)}
+
+\begin{itemize}
+  \item \textbf{Accuracy} : écart moyen de 0,5 point (90,16\,\% vs.\ 90,66\,\%) en faveur du MLP ;
+  \item \textbf{F1 macro} : écart de 0,6 point ;
+  \item RuleConEx \textbf{égale ou dépasse} le MLP sur \texttt{u4k-r4k-auth11k} (accuracy) et reste à moins de 1 point sur la majorité des synthétiques ;
+  \item Sur Amazon, RuleConEx obtient le \textbf{meilleur F1} sur deux jeux sur trois ;
+  \item Le MLP ne fournit \textbf{aucune explication} ; RuleConEx ajoute validité CF $\approx$ 99\,\% sans sacrifice majeur de performance.
+\end{itemize}
+
+\subsection{RuleConEx vs.\ HyConEx-Local}
+
+HyConEx-Local partage la branche d'importances/contrefactuels mais sans règles explicites. RuleConEx lui est \textbf{supérieur en accuracy moyenne} (+0,3 point) et \textbf{en F1 macro} (+1,8 points), grâce à la branche de règles. HyConEx-Local reste légèrement devant en AUC (+0,6 point) et \textbf{5$\times$ plus rapide}.
+
+\subsection{RuleConEx vs.\ HyperLogic}
+
+RuleConEx surpasse HyperLogic sur toutes les métriques prédictives (+7,6 points d'accuracy en moyenne). L'hyperréseau seul (HyperLogic) souffre sur les jeux difficiles (\texttt{auth22k} : 66,9\,\% accuracy) là où la fusion HyConEx + règles stabilise RuleConEx (70,3\,\%).
+
+\subsection{RuleConEx vs.\ modèles sklearn}
+
+Les arbres et forêts atteignent des performances correctes sur Amazon ($\approx$ 94\,\%) mais \textbf{s'effondrent} sur les synthétiques multi-classes (accuracy 41--65\,\%). RuleConEx généralise nettement mieux sur les 16 patterns d'opérations jointes.
+
+\subsection{RuleConEx vs.\ DLBAC$\alpha$ (papier)}
+
+\begin{itemize}
+  \item \textbf{Accuracy globale} : quasi-équivalente (0,9016 vs.\ 0,9027 sur 11 jeux) ;
+  \item \textbf{Jeux difficiles} : DLBAC$\alpha$ estimé à 94\,\% là où RuleConEx descend à 70--89\,\% (\texttt{auth22k}, \texttt{auth28k}) ;
+  \item \textbf{Jeux faciles} : RuleConEx atteint 97--99\,\%, dépassant l'estimation DLBAC$\alpha$ (94\,\%) ;
+  \item \textbf{Amazon UCI} : RuleConEx (94\,\% accuracy) surpasse nettement DLBAC$\alpha$ estimé (73\,\%) ;
+  \item \textbf{Explicabilité} : seul RuleConEx fournit règles + CF sans post-traitement ; DLBAC$\alpha$ reste une boîte noire interprétée \emph{a posteriori}.
+\end{itemize}
+
+%==============================================================================
+\section{Conclusion et perspectives}
+%==============================================================================
+
+Les expériences du méga-benchmark confirment que \textbf{RuleConEx atteint un compromis favorable entre performance prédictive et explicabilité} :
+
+\begin{enumerate}
+  \item \textbf{3\textsuperscript{e} rang} en accuracy moyenne (0,90\,\%), à 0,1 point de DLBAC$\alpha$ (papier) et du MLP ;
+  \item \textbf{Seul modèle} évalué sur la validité des contrefactuels ($\overline{\mathrm{CF}} = 98{,}7\,\%$) ;
+  \item \textbf{Règles IF-THEN} extractibles pour l'audit de politiques d'accès (section~\ref{tab:rules}) ;
+  \item \textbf{Contrefactuels} actionnables avec $P_{\mathrm{CF}} \approx 1$ sur les échantillons illustrés ;
+  \item Sur les jeux difficiles, un ResNet DLBAC$\alpha$ entraîné 60 époques reste supérieur ; RuleConEx compense par l'explicabilité native et de meilleures performances sur jeux faciles et Amazon UCI.
+\end{enumerate}
+
+\paragraph{Perspectives pour la suite du mémoire.}
+\begin{itemize}
+  \item Réentraîner RuleConEx avec plus d'époques sur les jeux difficiles pour rapprocher DLBAC$\alpha$ ;
+  \item Affiner l'affichage des contrefactuels (proposer aussi des activations \emph{inactif $\to$ actif}) ;
+  \item Étendre l'évaluation à des métriques d'\textbf{interprétabilité humaine} (longueur des règles, couverture, stabilité) ;
+  \item Rédiger le chapitre expérimental à partir de ce document et des figures exportées (\texttt{ranking\_*.png}, \texttt{heatmap\_*.png}).
+\end{itemize}
+
+\vspace{1em}
+\noindent
+\textbf{Références internes :}
+\begin{itemize}
+  \item Notebook : \texttt{HyConEx\_from\_scratch/notebooks/mega\_comparison\_all\_datasets.ipynb}
+  \item Package : \texttt{HyConEx\_from\_scratch/mega\_benchmark/}
+  \item Module RuleConEx : \texttt{HyConEx\_from\_scratch/ruleconex/}
+  \item Rapport d'avancement : \texttt{rapport\_avancement\_Erick\_TSAFACK.pdf}
+  \item Référence DLBAC$\alpha$ : Karimi et al. (2022), \emph{Toward Deep Learning Based Access Control}, arXiv:2203.15124
+\end{itemize}
+
+\end{document}

@@ -1,0 +1,138 @@
+// =============================================================================
+// Meme architecture que nouveau_module_architecture.dot, mise en page HORIZONTALE.
+// rankdir=LR : flux principal de gauche a droite (colonnes).
+// Rendu :
+//   dot -Tsvg  docs/nouveau_module_architecture_horizontal.dot -o docs/nouveau_module_architecture_horizontal.svg
+// =============================================================================
+
+digraph nouveau_module_architecture_horizontal {
+    graph [
+        rankdir=LR
+        splines=ortho
+        compound=true
+        nodesep=0.45
+        ranksep=1.15
+        fontname="Helvetica"
+        fontsize=11
+        label="Architecture HybridDRNet (vue horizontale) - nouveau_module\nFlux gauche -> droite : donnees -> hyper -> tetes -> pertes"
+        labelloc=t
+    ]
+    node [
+        fontname="Helvetica"
+        fontsize=10
+        shape=box
+        style="rounded,filled"
+        fillcolor="#f7f7f7"
+    ]
+    edge [fontname="Helvetica" fontsize=9 color="#333333"]
+
+    subgraph cluster_bin {
+        graph [rankdir=TB]
+        label="TabularBinarizer (binarizer.py)"
+        labelloc=b
+        style=dashed
+        color="#555555"
+
+        X_cont [shape=cylinder label="X_cont\nnumpy [B, n_feat]" fillcolor="#e3f2fd"]
+        X_bin  [shape=cylinder label="x_bin\ntorch [B, D_b]\n+/-1 bipolar" fillcolor="#e8f5e9"]
+        X_cont -> X_bin [label="fit/transform"]
+    }
+
+    subgraph cluster_hyper {
+        label="HyperWeightGenerator (hypernet.py)"
+        color="#ef6c00"
+        style=filled
+        fillcolor="#fff8e1"
+
+        subgraph cluster_tab {
+            label="TabResNetBackbone"
+            color="#e65100"
+            style=filled
+            fillcolor="#fff3e0"
+
+            STEM   [label="Stem\nD_b->H + LN + ReLU"]
+            BLOCKS [label="ResidualBlock\nx n_blocks"]
+            STEM -> BLOCKS
+        }
+
+        POOL [label="mean sur B\nh : [H]" fillcolor="#fce4ec"]
+
+        MAIN_HEAD [label="main_head\ntheta_main" fillcolor="#e0f7fa"]
+        CF_HEAD   [label="cf_head\ntheta_cf" fillcolor="#e0f7fa"]
+
+        BLOCKS -> POOL
+        POOL -> MAIN_HEAD [label="theta_main"]
+        POOL -> CF_HEAD   [label="theta_cf"]
+    }
+
+    X_bin -> STEM [ltail=cluster_bin lhead=cluster_tab label="forward"]
+
+    subgraph cluster_main {
+        label="Tete regles (main_rule_net.py)"
+        color="#2e7d32"
+        style=filled
+        fillcolor="#e8f5e9"
+
+        UNPACK_M [label="unpack\nW_rule, b_rule\nW_out, b_out"]
+        U_NODE   [label="u par regle\nx@W - |W|_1 + b" fillcolor="#fffde7"]
+        GATE     [label="porte\no = exp(-u^2/tau)" fillcolor="#fffde7"]
+        LOGITS   [shape=cylinder label="logits\n[B,C]" fillcolor="#e3f2fd"]
+        RULE_ACT [shape=note fillcolor="#fff9c4" label="rule_act\n[B,K]"]
+
+        UNPACK_M -> U_NODE -> GATE -> LOGITS
+        GATE -> RULE_ACT [style=dashed]
+    }
+
+    MAIN_HEAD -> UNPACK_M [ltail=cluster_hyper lhead=cluster_main label="theta_main" style=bold]
+
+    subgraph cluster_cf {
+        label="Tete CF (cf_head.py)"
+        color="#6a1b9a"
+        style=filled
+        fillcolor="#f3e5f5"
+
+        Y_TGT [shape=cylinder label="y_target\n[B]" fillcolor="#ede7f6"]
+        UNPACK_C [label="unpack_cf\nW1,b1,W2,b2"]
+        CONCAT [label="concat\nx_bin|onehot(y)"]
+        MLP_CF [label="MLP\n2 couches"]
+        SIGM   [label="sigmoide\nP(+1)"]
+        ST     [label="ST bipolar\n{-1,+1}"]
+        X_CF   [shape=cylinder label="x_cf_bin\n[B,D_b]" fillcolor="#e8f5e9"]
+
+        UNPACK_C -> CONCAT
+        Y_TGT -> CONCAT [label="one-hot"]
+        CONCAT -> MLP_CF -> SIGM -> ST -> X_CF
+    }
+
+    CF_HEAD -> UNPACK_C [ltail=cluster_hyper lhead=cluster_cf label="theta_cf" style=bold]
+    X_bin -> CONCAT [ltail=cluster_bin lhead=cluster_cf label="x_bin"]
+
+    subgraph cluster_eval_cf {
+        label="Eval CF (model.py)"
+        style=dashed
+        color="#455a64"
+
+        EVAL_NOTE [shape=note fillcolor="#eceff1" label="main_logits\n(x_cf, theta_main)"]
+        CF_LOGITS [shape=cylinder label="logits_cf\n[B,C]" fillcolor="#e3f2fd"]
+
+        EVAL_NOTE -> CF_LOGITS
+    }
+
+    X_CF -> EVAL_NOTE [ltail=cluster_cf lhead=cluster_eval_cf label="x_cf"]
+    UNPACK_M -> EVAL_NOTE [ltail=cluster_main lhead=cluster_eval_cf style=dashed color="#757575" label="theta_main"]
+
+    subgraph cluster_loss {
+        label="HybridDRTrainer - pertes (trainer.py)"
+        style=dashed
+        color="#37474f"
+
+        L1 [shape=note fillcolor="#eceff1" label="CE(logits, y)"]
+        L2 [shape=note fillcolor="#eceff1" label="CE_cf multi-cibles"]
+        L3 [shape=note fillcolor="#eceff1" label="flip_lambda x (# bits changes)"]
+        L4 [shape=note fillcolor="#eceff1" label="sparsite |W_rule|"]
+        { rank=same; L1; L2; L3; L4 }
+    }
+
+    LOGITS -> L1 [ltail=cluster_main lhead=cluster_loss style=dotted]
+    CF_LOGITS -> L2 [ltail=cluster_eval_cf lhead=cluster_loss style=dotted]
+}

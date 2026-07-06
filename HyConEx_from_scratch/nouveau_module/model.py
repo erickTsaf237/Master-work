@@ -29,6 +29,9 @@ class HybridDRNetModel(nn.Module):
         hyper_hidden_dim: int,
         cf_hidden_dim: int,
         temperature: float,
+        *,
+        tabresnet_n_blocks: int = 4,
+        tabresnet_dropout: float = 0.1,
     ) -> None:
         super().__init__()
         self.input_dim_bin = input_dim_bin
@@ -43,6 +46,8 @@ class HybridDRNetModel(nn.Module):
             num_rules=num_rules,
             cf_hidden_dim=cf_hidden_dim,
             hidden_dim=hyper_hidden_dim,
+            n_blocks=tabresnet_n_blocks,
+            dropout=tabresnet_dropout,
         )
 
     def forward(self, x_bin: torch.Tensor) -> ForwardOutputs:

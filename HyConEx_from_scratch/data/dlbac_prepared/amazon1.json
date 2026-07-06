@@ -1,0 +1,25 @@
+{
+  "name": "amazon1",
+  "kind": "real_world",
+  "label_mode": "binary_access",
+  "num_features": 14419,
+  "num_classes": 2,
+  "class_names": [
+    "deny",
+    "grant"
+  ],
+  "shapes": {
+    "train": [
+      20972,
+      14419
+    ],
+    "val": [
+      5244,
+      14419
+    ],
+    "test": [
+      6553,
+      14419
+    ]
+  }
+}

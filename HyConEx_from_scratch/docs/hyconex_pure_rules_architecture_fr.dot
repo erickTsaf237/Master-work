@@ -1,0 +1,253 @@
+// =============================================================================
+// Architecture HyConEx pur + hypernet local + tete DR-Net (hyconex_pure_rules)
+// Module : hyconex_pure_rules/model.py — HyConExLocalRulesModel
+//
+// Rendu SVG :
+//   dot -Tsvg docs/hyconex_pure_rules_architecture_fr.dot -o docs/hyconex_pure_rules_architecture_fr.svg
+// =============================================================================
+
+digraph G {
+    graph [
+        rankdir=TB
+        splines=spline
+        compound=true
+        clusterrank=local
+        bgcolor="#ffffff"
+        pad=0.25
+        margin=0.08
+        nodesep=0.55
+        ranksep=0.9
+        center=true
+        fontname="Arial"
+        fontsize=12
+        fontcolor="#1a1a1a"
+        label="HyConEx pur + hypernet local + regles DR-Net sur z\n(hyconex_pure_rules / HyConExLocalRulesModel)"
+        labelloc=t
+    ]
+    node [
+        fontname="Arial"
+        fontsize=10
+        fontcolor="#1a1a1a"
+        shape=box
+        style="rounded,filled"
+        fillcolor="#ffffff"
+        color="#5c5c5c"
+        penwidth=1
+    ]
+    edge [
+        fontname="Arial"
+        fontsize=9
+        fontcolor="#444444"
+        color="#4a4a4a"
+        penwidth=0.85
+        arrowsize=0.65
+    ]
+
+    // --- Entree ---
+    entree [
+        fillcolor="#e8eef5"
+        label="Entree x\none-hot DLBAC (oh_*)\nvaleurs dans [0, 1]\nex. 157 dims (synth.) ou 14 419 (Amazon)"
+    ]
+
+    // --- Encodeur ---
+    subgraph cluster_encodeur {
+        fontsize=11
+        fontname="Arial"
+        fontcolor="#1a1a1a"
+        label="Encodeur tabulaire (HyConEx)"
+        labelloc=t
+        style="rounded,filled"
+        fillcolor="#f0f4fa"
+        color="#90a4c4"
+        margin=18
+
+        enc1 [fillcolor="#ffffff" label="Linear(input, hidden)\nReLU"]
+        enc2 [fillcolor="#ffffff" label="Linear(hidden, hidden)\nReLU"]
+        enc3 [fillcolor="#ffffff" label="Linear(hidden, latent_dim)\n-> z"]
+        enc1 -> enc2 -> enc3
+    }
+
+    z [
+        fillcolor="#dce8f5"
+        label="Representation latente z\nlatent_dim = 32 (synth.) / 64 (Amazon)"
+    ]
+
+    entree -> enc1 [lhead=cluster_encodeur label="x" minlen=2]
+    enc3 -> z [ltail=cluster_encodeur minlen=1]
+
+    // --- Branche A : hypernet local ---
+    subgraph cluster_hyper {
+        fontsize=11
+        fontname="Arial"
+        fontcolor="#1a1a1a"
+        label="Branche A — Hypernet local HyConEx (78 % du signal)"
+        labelloc=t
+        style="rounded,filled"
+        fillcolor="#f8f6f3"
+        color="#d4c4b8"
+        margin=20
+
+        hyper_mlp [
+            fillcolor="#ffffff"
+            label="Hyper-reseau hyper(z)\nLinear -> ReLU -> Linear\nproduit W(z), b(z) par classe"
+        ]
+        hyper_einsum [
+            fillcolor="#faf8f5"
+            label="Classifieur local instance-specific\nlogit_hyper_c = sum_i W_c,i(z) * z_i + b_c(z)"
+        ]
+        logits_hyper [
+            fillcolor="#e8eef5"
+            label="logits_hyper\n(un par classe)"
+        ]
+        hyper_mlp -> hyper_einsum -> logits_hyper
+    }
+
+    z -> hyper_mlp [lhead=cluster_hyper label="z" fontcolor="#5d4037" color="#795548" penwidth=1.0 minlen=2]
+
+    // --- Branche B : DR-Net sur z ---
+    subgraph cluster_regles {
+        fontsize=11
+        fontname="Arial"
+        fontcolor="#1a1a1a"
+        label="Branche B — Tete DR-Net / HyperLogic sur z (22 % du signal)"
+        labelloc=t
+        style="rounded,filled"
+        fillcolor="#f3f8f4"
+        color="#a8c4ae"
+        margin=20
+
+        bipolar [
+            fillcolor="#ffffff"
+            label="Bipolarisation de z\nz_bin in {-1, +1}^d"
+        ]
+        theta [
+            fillcolor="#f0f4fa"
+            label="Parametres DR-Net theta\n= theta_bias + 0.1 * MLP(mean(z))\n(poids quasi-globaux, legere modulation batch)"
+        ]
+        unpackm [
+            fillcolor="#ffffff"
+            label="Depliage theta\nw_rule, b_rule, w_out, b_out"
+        ]
+        drnet [
+            fillcolor="#fafdf9"
+            label="DR-Net (K regles sur z_*)\nu_k = z^T w_k - ||w_k||_1 + b_k\no_k = exp(-u_k^2 / tau)"
+        ]
+        logits_rules [
+            fillcolor="#e8eef5"
+            label="logits_rules\nlogit = o @ w_out + b_out"
+        ]
+        bipolar -> unpackm -> drnet -> logits_rules
+        theta -> unpackm [label="theta" fontcolor="#0d47a1" color="#1565c0"]
+    }
+
+    z -> bipolar [lhead=cluster_regles label="z" minlen=2]
+    z -> theta [lhead=cluster_regles label="mean(z)" style=dashed color="#757575" minlen=1]
+
+    // --- Fusion ---
+    combine [
+        fillcolor="#fff8e1"
+        label="Combinaison des logits\nlogits = 0.78 * logits_hyper + 0.22 * logits_rules"
+    ]
+    prediction [
+        fillcolor="#c8e6c9"
+        label="Prediction finale\nsoftmax(logits) -> classe"
+    ]
+
+    logits_hyper -> combine [ltail=cluster_hyper label="78 %" fontcolor="#5d4037" color="#795548" penwidth=1.1]
+    logits_rules -> combine [ltail=cluster_regles label="22 %" fontcolor="#1b5e20" color="#2e7d32" penwidth=1.1]
+    combine -> prediction
+
+    // --- Contrefactuels HyConEx ---
+    subgraph cluster_cf {
+        fontsize=11
+        fontname="Arial"
+        fontcolor="#1a1a1a"
+        label="Generateur de contrefactuels (HyConEx, branche parallele)"
+        labelloc=t
+        style="rounded,filled"
+        fillcolor="#f8f5fb"
+        color="#c4b8d4"
+        margin=20
+
+        ytarget [
+            fillcolor="#f0ecf8"
+            label="Classe cible y_target\n(one-hot)"
+        ]
+        concat_cf [
+            fillcolor="#ffffff"
+            label="Concatenation\n[z | y_target]"
+        ]
+        cf_mlp [
+            fillcolor="#ffffff"
+            label="cf_generator\nMLP -> Tanh -> delta"
+        ]
+        xcf [
+            fillcolor="#e8eef5"
+            label="x' = clamp(x + delta, 0, 1)\ncontrefactuel dans l'espace oh_*"
+        ]
+        { rank=same; ytarget; concat_cf }
+        concat_cf -> cf_mlp -> xcf
+    }
+
+    z -> concat_cf [lhead=cluster_cf label="z" fontcolor="#4a148c" color="#6a1b9a" penwidth=1.0]
+    ytarget -> concat_cf
+    entree -> cf_mlp [lhead=cluster_cf label="x (pour delta sur entree)" style=dashed color="#888888" constraint=false]
+
+    // --- Explications (sorties, pas dans forward) ---
+    subgraph cluster_explain {
+        fontsize=11
+        fontname="Arial"
+        fontcolor="#1a1a1a"
+        label="Explications exportees (post-inference)"
+        labelloc=t
+        style="rounded,filled"
+        fillcolor="#fafafa"
+        color="#b0b0b0"
+        margin=16
+
+        ex_rules [
+            fillcolor="#f3f8f4"
+            label="Regles symboliques\nIF z_i=+/-1 AND ... THEN classe\n(export_rules / extract_rules)"
+        ]
+        ex_local [
+            fillcolor="#f8f6f3"
+            label="Hypernet local\ntermes w_ci * z_i + b_c\n(explain_local_hypernet)"
+        ]
+        ex_bridge [
+            fillcolor="#f0f4fa"
+            label="Pont vers entree\ngrad logit / grad oh_*\n(explain_input_bridge)"
+        ]
+        ex_cf [
+            fillcolor="#f8f5fb"
+            label="Contrefactuel\nliste des oh_* modifies\n(explain_counterfactual)"
+        ]
+    }
+
+    drnet -> ex_rules [ltail=cluster_regles lhead=cluster_explain style=dotted color="#757575" label="theta" constraint=false]
+    hyper_einsum -> ex_local [ltail=cluster_hyper lhead=cluster_explain style=dotted color="#757575" constraint=false]
+    enc1 -> ex_bridge [ltail=cluster_encodeur lhead=cluster_explain style=dotted color="#757575" label="grad" constraint=false]
+    xcf -> ex_cf [ltail=cluster_cf lhead=cluster_explain style=dotted color="#757575" constraint=false]
+
+    // --- Perte ---
+    subgraph cluster_loss {
+        fontsize=11
+        fontname="Arial"
+        fontcolor="#1a1a1a"
+        label="Fonction de perte (entrainement)"
+        labelloc=t
+        style="rounded,filled"
+        fillcolor="#fafafa"
+        color="#b0b0b0"
+        margin=16
+
+        lsum [
+            fillcolor="#ffffff"
+            style="rounded,filled,dashed"
+            color="#888888"
+            label="L = CE(logits, y)\n+ lambda_sparse * mean(|w_rule|)\n+ lambda_cf * CE(logits(x'), y_target)\n+ lambda_L1 * mean(|x' - x|) + lambda_L2 * ||x' - x||^2"
+        ]
+    }
+
+    prediction -> lsum [lhead=cluster_loss color="#2e7d32" penwidth=0.75 minlen=2]
+    xcf -> lsum [ltail=cluster_cf lhead=cluster_loss style=dashed color="#6a1b9a" label="CF" minlen=2]
+}

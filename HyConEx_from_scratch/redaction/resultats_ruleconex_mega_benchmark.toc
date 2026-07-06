@@ -1,0 +1,36 @@
+\babel@toc {french}{}\relax 
+\contentsline {section}{\numberline {1}Contexte et lien avec le rapport d'avancement}{3}{section.1}%
+\contentsline {section}{\numberline {2}Protocole expérimental}{3}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Jeux de données}{3}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}Modèles comparés}{3}{subsection.2.2}%
+\contentsline {subsection}{\numberline {2.3}Métriques}{3}{subsection.2.3}%
+\contentsline {paragraph}{Valeurs DLBAC$\alpha $ retenues (milieu d'intervalle papier).}{4}{section*.2}%
+\contentsline {section}{\numberline {3}Synthèse globale}{4}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Classement par métrique (moyenne sur 11 jeux)}{4}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Rang moyen multi-métrique}{4}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}Victoires par jeu (meilleur score)}{4}{subsection.3.3}%
+\contentsline {section}{\numberline {4}Résultats détaillés par jeu de données}{4}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Accuracy}{4}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}F1 macro}{5}{subsection.4.2}%
+\contentsline {section}{\numberline {5}Validité des contrefactuels (RuleConEx)}{5}{section.5}%
+\contentsline {section}{\numberline {6}Exemples d'explications : règles IF-THEN et contrefactuels}{6}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Fusion des trois branches}{6}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}Règles IF-THEN extraites}{6}{subsection.6.2}%
+\contentsline {paragraph}{Importances locales.}{6}{section*.3}%
+\contentsline {subsection}{\numberline {6.3}Contrefactuels générés}{7}{subsection.6.3}%
+\contentsline {paragraph}{Lecture.}{7}{section*.4}%
+\contentsline {paragraph}{Validité globale sur le jeu.}{7}{section*.5}%
+\contentsline {section}{\numberline {7}Comparaison avec DLBAC$\alpha $ (référence du papier)}{7}{section.7}%
+\contentsline {subsection}{\numberline {7.1}DLBAC$\alpha $ vs.\ algorithmes ML classiques (F1)}{7}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}DLBAC$\alpha $ vs.\ policy mining}{7}{subsection.7.2}%
+\contentsline {subsection}{\numberline {7.3}Accuracy jointe : RuleConEx vs.\ DLBAC$\alpha $}{7}{subsection.7.3}%
+\contentsline {subsection}{\numberline {7.4}Synthèse RuleConEx vs.\ DLBAC$\alpha $}{8}{subsection.7.4}%
+\contentsline {section}{\numberline {8}Temps d'entraînement}{8}{section.8}%
+\contentsline {section}{\numberline {9}Analyse comparative}{8}{section.9}%
+\contentsline {subsection}{\numberline {9.1}RuleConEx vs.\ MLP (meilleure baseline prédictive)}{8}{subsection.9.1}%
+\contentsline {subsection}{\numberline {9.2}RuleConEx vs.\ HyConEx-Local}{9}{subsection.9.2}%
+\contentsline {subsection}{\numberline {9.3}RuleConEx vs.\ HyperLogic}{9}{subsection.9.3}%
+\contentsline {subsection}{\numberline {9.4}RuleConEx vs.\ modèles sklearn}{9}{subsection.9.4}%
+\contentsline {subsection}{\numberline {9.5}RuleConEx vs.\ DLBAC$\alpha $ (papier)}{9}{subsection.9.5}%
+\contentsline {section}{\numberline {10}Conclusion et perspectives}{9}{section.10}%
+\contentsline {paragraph}{Perspectives pour la suite du mémoire.}{9}{section*.6}%

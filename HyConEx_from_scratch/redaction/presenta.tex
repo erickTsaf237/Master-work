@@ -1,0 +1,557 @@
+\documentclass{beamer}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usetheme{Madrid}
+\usecolortheme{default}
+
+% Couleurs
+\definecolor{titleblue}{RGB}{0, 51, 102}
+\setbeamercolor{title}{fg=titleblue}
+\setbeamercolor{subtitle}{fg=black}
+
+\title{Une approche d'explicabilité des modèles d'apprentissage profond}
+\subtitle{pour le contrôle d'accès aux données et aux traitements}
+\author{TSAFACK NTEUDEM ERICK}
+% \institute[Université de Dschang]{}
+\date{\today}
+
+\begin{document}
+% ==================== SLIDE 1 : PAGE DE COUVERTURE ====================
+\begin{frame}
+\begin{center}
+    \vspace{0.5cm}
+    
+    % Logo (optionnel)
+    % \includegraphics[width=4cm]{logo_universite.png} 
+    % \vspace{0.8cm}
+    
+    {\LARGE \textcolor{titleblue}{\textbf{RAPPORT D'AVANCEMENT}}} \\[0.2cm]
+    {\large du Mémoire de Master} \\[0.2cm]
+    
+    {\Huge \textbf{Une approche d'explicabilité des modèles d'apprentissage profond pour le contrôle d'accès aux données et aux traitements}} \\[0.2cm]
+    
+    {\Large \textbf{Présenté par :}} \\[0.3cm]
+    {\Large \insertauthor} \\[1cm]
+    
+    {\large Encadré par : Dr. AZANGUEZET Martin} \\[1.2cm]
+    
+    {\large \insertdate \quad\quad Version 1.0}
+    
+\end{center}
+\end{frame}
+
+\begin{frame}
+\frametitle{1. Introduction et Motivation (Toward Deep Learning Based Access Control)}
+\framesubtitle{Problèmes des approches classiques de contrôle d’accès au donnée}
+
+\begin{itemize}
+    \item Les modèles classiques (RBAC, ABAC, ReBAC) nécessitent :
+    \begin{itemize}
+        \item \textbf{Attribute Engineering} : conception manuelle d'attributs pertinents à partir de métadonnées brutes
+        \item \textbf{Policy Engineering} : création manuelle ou semi-automatique de règles d'accès
+    \end{itemize}
+    \item Limitations majeures :
+    \begin{itemize}
+        \item Coût élevé et erreurs humaines (over/under-provisioning)
+        \item Mauvaise généralisation sur des utilisateurs/ressources non vus
+        \item Difficile à maintenir dans les systèmes dynamiques, à grande échelle (Cloud, IoT, etc.)
+    \end{itemize}
+    \item \textbf{Proposition} : \textbf{Deep Learning Based Access Control (DLBAC)}
+\end{itemize}
+
+\begin{center}
+\textbf{Idée clé} : Remplacer les règles par un réseau de neurones entraîné directement sur les \textbf{métadonnées brutes}.
+\end{center}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{2. Le Concept DLBAC}
+\framesubtitle{Approche révolutionnaire}
+
+\begin{itemize}
+    \item \textbf{Entrée} : Métadonnées brutes des utilisateurs et ressources (join\_date, department, logs, etc.)
+    \item \textbf{Modèle} : Réseau de neurones profond (indépendant de l'architecture)
+    \item \textbf{Sortie} : Décision d'accès (grant/deny) pour chaque opération
+\end{itemize}
+
+% \begin{center}
+% \includegraphics[width=0.9\textwidth]{figures/comparison.png} % Remplacer par vraie image si disponible
+% \end{center}
+
+\textbf{Avantages principaux :}
+\begin{itemize}
+    \item Plus besoin d'ingénierie d'attributs ni de règles d'accès
+    \item Meilleure généralisation grâce au Deep Learning
+    \item Approche \textbf{end-to-end} et dynamique
+\end{itemize}
+
+\textbf{DLBAC$_\alpha$} : Prototype proposé et évalué dans le papier.
+
+\end{frame}
+
+\begin{frame}
+\frametitle{3. Évaluation et Résultats}
+\framesubtitle{DLBAC$_\alpha$ vs Approches existantes}
+
+\begin{itemize}
+    \item \textbf{Datasets} : 2 réels (Amazon) + 8 synthétiques de complexité croissante
+    \item \textbf{Modèles testés} :
+    \begin{itemize}
+        \item DLBAC$_\alpha$ (ResNet, DenseNet, Xception)
+        \item ML classiques (RF, SVM, MLP)
+        \item Policy Mining (XuStoller, Rhapsody, EPDE-ML)
+    \end{itemize}
+\end{itemize}
+
+\textbf{Résultats clés :}
+\begin{itemize}
+    \item DLBAC$_\alpha$ obtient les meilleurs scores \textbf{F1}, TPR et généralisation
+    \item Meilleur équilibre entre \textit{over-provisioning} et \textit{under-provisioning}
+    \item Plus robuste face à la complexité des données
+\end{itemize}
+
+\begin{center}
+\small Meilleure précision + généralisation que le policy mining et le ML classique
+\end{center}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{4. Explicabilité, Perspectives \& Conclusion}
+\framesubtitle{Comprendre les décisions du modèle}
+
+\begin{itemize}
+    \item \textbf{Explainability} :
+    \begin{itemize}
+        \item \textit{Integrated Gradients} : importance de chaque métadonnée (local + global)
+        \item \textit{Knowledge Transferring} : extraction d'arbres de décision approximatifs
+    \end{itemize}
+    \item Permet de justifier les décisions et de modifier des métadonnées pour ajuster les accès
+\end{itemize}
+
+\vspace{0.3cm}
+\textbf{Directions futures :}
+\begin{itemize}
+    \item Explicabilité Post-hoc
+    \item Administration (fine-tuning, life-long learning)
+    \item Robustesse (attaques adversariales, biais)
+    \item Intégration hybride avec RBAC/ABAC
+\end{itemize}
+
+\begin{center}
+\textbf{Conclusion :} DLBAC offre une approche prometteuse, automatisée et performante pour l'Access Control du futur.
+\end{center}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Pourquoi les explications Post-Hoc sont insuffisantes pour DLBAC ? (A Comprehensive Survey on Self-Interpretable
+Neural Networks)}
+
+\begin{itemize}
+    \item DLBAC est un système de \textbf{décision critique} en sécurité
+    \item Les méthodes post-hoc sont :
+    \begin{itemize}
+        \item \alert{Fragiles} et peu robustes face aux attaques
+        \item \alert{Peu fidèles} au véritable fonctionnement du réseau
+        \item \alert{Instables} : explications variables pour des entrées similaires
+        \item Computationnellement coûteuses
+    \end{itemize}
+    \item Risque majeur : fausse confiance dans les décisions d’accès
+\end{itemize}
+
+\begin{center}
+\textbf{\Large Nécessité d’une architecture Self-Interpretable}
+\end{center}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Choix des Explications pour DLBAC (AI Explainability 360: Impact and Design)}
+\framesubtitle{Contrôle d'accès basé sur Deep Learning}
+\begin{itemize}Quel type d'explication choisir ?
+    \item des Contrefactuelles
+    \item des règles de décisions
+\end{itemize}
+
+\begin{block}{Pourquoi les explications \textbf{Contrefactuelles} ?}
+\begin{itemize}
+    \item Répondent à la question : \textbf{« Que faut-il changer pour obtenir/refuser l'accès ? »}
+    \item Très \textbf{actionnables} pour les utilisateurs et administrateurs
+    \item Permettent de comprendre les \textbf{frontières de décision} du modèle
+    \item Essentielles en sécurité : expliquer un refus d'accès de manière constructive
+    \item Exemple : « Ajoutez le rôle X ou changez le département Y pour obtenir l'accès »
+\end{itemize}
+\end{block}
+\end{frame}
+
+\begin{frame}
+\frametitle{Choix des Explications pour DLBAC (AI Explainability 360: Impact and Design)}
+\begin{block}{Pourquoi les explications \textbf{basées sur des Règles} ?}
+\begin{itemize}
+    \item Fournissent une \textbf{logique globale et auditable} du modèle
+    \item Faciles à comprendre par les non-experts et les régulateurs
+    \item Permettent la \textbf{vérification formelle} des politiques d'accès
+    \item Compatibles avec les exigences de conformité (RGPD, audits de sécurité)
+    \item Exemple : « Accès accordé si (département = IT) ET (niveau senior) »
+\end{itemize}
+\end{block}
+
+\begin{center}
+\textbf{Combinaison idéale pour DLBAC :} \\
+Règles (globale + auditable) + Contrefactuelles (locale + actionnable)
+\end{center}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{HyConEx : Hypernetwork Classifier avec Explications Contrefactuelles}
+
+\begin{itemize}
+    \item Modèle Deep Learning conçu pour les \textbf{données tabulaires}
+    \item Combine dans une seule architecture :
+    \begin{itemize}
+        \item Prédiction de classe performante
+        \item Génération de \textbf{contrefactuels plausibles} pour toutes les classes alternatives
+    \end{itemize}
+    \item Tout est produit en \textbf{un seul forward pass} (très efficace)
+\end{itemize}
+
+\begin{center}
+\textbf{Idée clé :} Un modèle qui prédit \textbf{et} explique simultanément comment modifier l'entrée pour changer la décision.
+\end{center}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Positionnement de HyConEx}
+
+\begin{itemize}
+    \item Modèles interprétables classiques (arbres, règles) : bonne explicabilité mais performance limitée
+    \item Modèles DL + explications post-hoc (LIME, SHAP, CEM, PPCEF) : haute performance mais explications lentes et externes
+    \item \textbf{HyConEx} : première approche qui intègre \textbf{prédiction + explication contrefactuelle} dans un seul modèle
+\end{itemize}
+
+\begin{center}
+\textbf{Avantage majeur pour le contrôle d'accès :} \\
+Explication actionnable immédiatement (« que faut-il changer pour obtenir/refuser l'accès ? »)
+\end{center}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Méthodologie de HyConEx}
+
+\begin{itemize}
+    \item \textbf{Hypernetwork} $H(x;\theta)$ : génère pour chaque entrée $x$ une matrice de poids $W$
+    \item $W$ définit un \textbf{classifieur linéaire local} → frontière de décision locale
+    \item Les lignes de $W$ servent à générer des contrefactuels par translation : $x' = x - W_m$
+\end{itemize}
+
+\vspace{0.4cm}
+
+\begin{block}{Fonction de perte globale}
+\begin{itemize}
+    \item Perte de classification de l'exemple d'entrée
+    \item Pour chaque classe alternative :
+    \begin{itemize}
+        \item Perte de classification du contrefactuel
+        \item Perte de proximité ($\|x - x'\|$)
+        \item Perte de plausibilité (via Normalizing Flow conditionnel)
+    \end{itemize}
+\end{itemize}
+\end{block}
+
+\begin{center}
+\textbf{Résultat :} Prédictions + Contrefactuels plausibles et actionnables en un seul passage
+\end{center}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{HyperLogic : Amélioration de l'apprentissage de règles avec HyperNetworks}
+
+\begin{itemize}
+    \item Approche basée sur les \textbf{hypernetworks} pour générer les poids d'un réseau principal d'apprentissage de règles
+    \item Objectif : Augmenter la \textbf{diversité} et la \textbf{précision} des règles tout en préservant l'interprétabilité
+    \item Permet de générer \textbf{plusieurs ensembles de règles} de qualité en une seule session d'entraînement
+    \item Compatible avec les méthodes différentiables d'apprentissage de règles existantes
+\end{itemize}
+
+\begin{center}
+\textbf{Idée clé :} Utiliser la flexibilité des hypernetworks pour contourner les limitations structurelles des réseaux de règles
+\end{center}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Positionnement de HyperLogic}
+
+\begin{itemize}
+    \item Les réseaux de règles classiques sont souvent trop rigides et peu expressifs
+    \item Les approches différentiables actuelles manquent de diversité dans les règles apprises
+    \item \textbf{HyperLogic} apporte :
+    \begin{itemize}
+        \item Plus grande flexibilité grâce à la génération dynamique des poids
+        \item Meilleure capture des patterns hétérogènes dans les données
+        \item Plusieurs ensembles de règles candidats en un seul entraînement
+    \end{itemize}
+\end{itemize}
+
+\begin{center}
+\textbf{Avantage majeur :} Meilleure expressivité sans sacrifier l'interprétabilité
+\end{center}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Méthodologie de HyperLogic}
+
+\begin{itemize}
+    \item \textbf{Hypernetwork} : génère les poids $\theta$ du réseau principal à partir d'un bruit gaussien
+    \item \textbf{Réseau principal} : réseau de règles différentiable (inspiré de DR-Net)
+        \begin{itemize}
+            \item Couche "Rule" : apprend des conjonctions logiques
+            \item Couche "OR" : combine les règles
+        \end{itemize}
+    \item Deux stratégies de combinaison des poids possibles (fusion pondérée ou génération partielle)
+    \item Régularisation : sparsité + diversité (KL divergence)
+\end{itemize}
+
+\begin{center}
+\textbf{Résultat :} Apprentissage de règles plus diverses, précises et concises
+\end{center}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Méthodologie de HyperLogic}
+
+\begin{itemize}
+    \item \textbf{Hypernetwork} $G(\epsilon)$ génère les poids $\theta = (w, u)$ du réseau principal :
+    $$
+    \theta = G(\epsilon), \quad \epsilon \sim \mathcal{N}(0, I)
+    $$
+    
+    \item \textbf{Réseau principal (inspiré de DR-Net)} :
+    \begin{itemize}
+        \item \textbf{Couche Rule} apprend des conjonctions logiques : pour chaque règle $k$
+        $$
+        o_k = h\left( \sum_{d=1}^D w_{d,k} x_d - \sum_{d=1}^D |w_{d,k}| \right)
+        $$
+        avec $h(u) = \exp\left(-\frac{u^2}{\tau^2}\right)$ (approximation différentiable)
+        
+        \item \textbf{Couche OR} : Combine les règles
+        $$
+        f(x) = \sum_{k=1}^K u_k \, o_k
+        $$
+    \end{itemize}
+    
+    \item Modèle final :
+    $$
+    f_\mu(x) = \mathbb{E}_{\theta \sim \mu} \left[ \sum_{k=1}^K u_k \, h(\dots) \right] \approx \frac{1}{M} \sum_{m=1}^M f_{\theta^m}(x)
+    $$
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Méthodologie de HyperLogic}
+
+\begin{itemize}
+    \item \textbf{1. Stratégies de combinaison des poids}
+    
+    \begin{block}{Fusion pondérée (stratégie principale)}
+    $$
+    W_{\text{final}} = \alpha \cdot W_{\text{hyper}} + (1 - \alpha) \cdot W_{\text{main}}
+    $$
+    où $\alpha \in [0,1]$ est un paramètre \textbf{apprenable}
+    \end{block}
+    
+    \vspace{0.2cm}
+    
+    \begin{block}{Génération partielle}
+    La hypernetwork ne génère que certains modules du réseau principal (ex. : seulement la Rule Layer) pour les très hautes dimensions.
+    \end{block}
+
+    \item \textbf{2. Régularisation}
+    $$
+    \ell_{\text{reg}} = \lambda_1 \, D_{\text{KL}}(\mu \, || \, \mu_0) + \lambda_2 \, \mathbb{E}_{\mu}\left[ \sum_{k=1}^K |u_k| \right]
+    $$
+    
+    \begin{itemize}
+        \item $\lambda_1 D_{\text{KL}}$ $\rightarrow$ \textbf{encourage la diversité} des ensembles de règles
+        \item $\lambda_2 \mathbb{E}[|u_k|]$ $\rightarrow$ \textbf{encourage la sparsité} (règles plus concises)
+    \end{itemize}
+\end{itemize}
+
+
+\begin{center}
+\textbf{Conséquence :} Meilleure expressivité tout en maintenant l'interprétabilité
+\end{center}
+
+\end{frame}
+
+\begin{frame}{Méthodologie de HyperLogic}
+    \begin{block}{Fonction de perte}
+$\ell_{\text{task}} + \lambda_1 \, D_{\text{KL}}(\mu \| \mu_0) + \lambda_2 \, \mathbb{E}_\mu \left[ \sum |u_k| \right]$
+\end{block}
+\end{frame}
+
+\begin{frame}
+\frametitle{Perspectives pour mon modèle DLBAC (Règles + Contrefactuelles)}
+
+\begin{itemize}
+    \item \textbf{HyperLogic} excelle dans l'apprentissage de \textbf{règles interprétables} et diversifiées
+    \item \textbf{HyConEx} excelle dans la génération rapide de \textbf{contrefactuels plausibles}
+    \item \textbf{Idée d'intégration pour DLBAC :}
+    \begin{itemize}
+        \item Utiliser un hypernetwork pour générer plusieurs ensembles de règles (globale + auditable)
+        \item Combiner avec une branche contrefactuelle inspirée de HyConEx (locale + actionnable)
+        \item Un seul modèle produisant à la fois :
+        \begin{itemize}
+            \item Règles logiques pour l’audit et la conformité
+            \item Contrefactuels pour expliquer les décisions d’accès
+        \end{itemize}
+    \end{itemize}
+\end{itemize}
+
+\begin{center}
+\textbf{Objectif final :} Un modèle DLBAC, performant, interprétable et actionnable
+\end{center}
+
+\end{frame}
+
+% ==================== Modèle unifié (règles + contrefactuels) : 5 slides théoriques ====================
+
+\begin{frame}
+\frametitle{Un modèle unifié pour DLBAC}
+\framesubtitle{Règles globales et contrefactuels locaux}
+
+\begin{itemize}
+    \item On cherche une fonction $f$ sur des données \textbf{tabularies} telle que, pour chaque instance $x$ :
+    \begin{itemize}
+        \item $f(x)$ encode une \textbf{décision de classe} (accès / refus, ou multi-classes) ;
+        \item une \textbf{lecture en règles} révèle des conjonctions de littéraux sur une représentation discrète ;
+        \item une \textbf{branche contrefactuelle} propose des modifications minimales de $x$ pour atteindre une classe cible $c \neq \hat{y}(x)$.
+    \end{itemize}
+    \item \textbf{Hypernetwork} $H$ : à partir d'une représentation latente dérivée de l'instance (éventuellement agrégée sur plusieurs entrées), $H$ produit deux vecteurs de paramètres
+    \[
+    (\theta_{\text{rule}}, \theta_{\text{cf}}) = H(\cdot)\,,
+    \]
+    qui spécialisent respectivement le classifieur à base de règles et le générateur de contrefactuels.
+\end{itemize}
+
+\begin{center}
+\textbf{Synthèse} : une seule passe avant combine \textbf{politique locale} (paramètres instantanés) et \textbf{explication actionnable}.
+\end{center}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Représentation discrète bipolarisée}
+\framesubtitle{De $\mathbb{R}^p$ à $\{-1,+1\}^D$}
+
+\begin{itemize}
+    \item Chaque coordonnée continue est discrétisée en $B$ intervalles (par exemple via quantiles empiriques), ce qui définit $B$ \textbf{littéraux exclusifs} par variable.
+    \item L'instance est plongée dans un espace $\{-1,+1\}^D$ où $D$ est la somme des nombres d'intervalles par attribut : exactement un littéral par variable actif à $+1$, les autres à $-1$.
+    \item Ce plongement aligne la géométrie de l'entrée sur la \textbf{couche Rule} de type HyperLogic / DR-Net, où les poids $w_k$ agissent comme des conjonctions relaxées sur ces littéraux.
+    \item Pour mesurer la \textbf{proximité} d'un contrefactuel $x'$ vis-à-vis de $x$, on peut repasser par le domaine continu (barycentre des intervalles actifs) et utiliser une norme $\|\cdot\|_1$ ou $\ell_2$.
+\end{itemize}
+
+\begin{block}{Interprétation DLBAC}
+Chaque dimension de $\{-1,+1\}^D$ est un \textbf{attribut discretisé} (niveau de séniorité, tranche d'ancienneté, etc.), lisible pour un auditeur.
+\end{block}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Classifieur à règles induit par $\theta_{\text{rule}}$}
+\framesubtitle{Même structure que DR-Net / HyperLogic}
+
+\begin{itemize}
+    \item Le vecteur $\theta_{\text{rule}}$ se décompose en poids de règles $w_k \in \mathbb{R}^D$, biais $b_k$, matrice de sortie $U \in \mathbb{R}^{K \times C}$ et biais de classe.
+    \item Score de la $k$-ième règle (activation douce) :
+    \[
+    u_k(x) = x^\top w_k - \|w_k\|_1 + b_k\,, \qquad
+    o_k(x) = \exp\!\left(-\frac{u_k(x)^2}{\tau^2}\right), \quad \tau > 0\,.
+    \]
+    \item Logits multi-classes :
+    \[
+    z(x) = O(x)\, U + b_{\text{out}}\,, \qquad O(x) = \bigl(o_1(x),\ldots,o_K(x)\bigr)\,.
+    \]
+    \item Les $o_k$ jouent le rôle d'une \textbf{couche OR} sur des conjonctions : $u_k$ pénalise les littéraux non alignés avec les signes de $w_k$.
+\end{itemize}
+
+\begin{center}
+\textbf{Lecture} : les colonnes $w_k$ mettent en évidence quels littéraux $\pm 1$ soutiennent chaque règle ; $U$ route chaque règle vers les classes.
+\end{center}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Contrefactuels dans $\{-1,+1\}^D$}
+\framesubtitle{Réseau conditionné par la classe cible}
+
+\begin{itemize}
+    \item On fixe une classe désirée $c$ et on forme le vecteur one-hot $e_c \in \mathbb{R}^C$.
+    \item Un réseau auxiliaire $g_{\theta_{\text{cf}}}$ (paramétré par l'hypernetwork) lit la paire $(x, e_c)$ et produit, pour chaque dimension $j$, un logit $\ell_j$ puis $p_j = \sigma(\ell_j) \approx \mathbb{P}(x'_j = +1)$.
+    \item On définit un contrefactuel \textbf{dur} $x' \in \{-1,+1\}^D$ par seuillage, tout en rétro-propageant à travers une relaxation continue (estimateur straight-through) pour optimiser les flips.
+    \item Pour chaque $c$, on impose que $f(x')$ classe $c$ (entropie croisée sur $z(x')$) et que $x'$ reste \textbf{proche} de $x$ (pénalité sur le nombre ou le coût des changements de littéraux).
+\end{itemize}
+
+\begin{block}{Lien avec HyConEx}
+Même esprit : \textbf{une décision} et \textbf{un chemin de modification} co-entraînés, ici dans un espace discret compatible avec les règles.
+\end{block}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Objectif d'apprentissage}
+\framesubtitle{Perte composite}
+
+\begin{itemize}
+    \item Perte totale (scalaires $\lambda_{\text{cf}}, \lambda_{\text{flip}}, \lambda_{\text{sparse}} \geq 0$) :
+\end{itemize}
+
+\vspace{-0.2cm}
+\[
+\begin{aligned}
+\mathcal{L}
+    &= \underbrace{\mathrm{CE}\bigl(z(x), y\bigr)}_{\text{classification}} \\[0.35em]
+    &\quad + \lambda_{\text{cf}} \sum_{c \neq y} \mathrm{CE}\bigl(z(x'_c), c\bigr) \\[0.35em]
+    &\quad + \lambda_{\text{flip}}\, \mathbb{E}\bigl[d(x, x'_c)\bigr] \\[0.35em]
+    &\quad + \lambda_{\text{sparse}}\, \frac{1}{KD}\sum_{k,j} |w_{k,j}|\,.
+\end{aligned}
+\]
+
+\vspace{0.2cm}
+\begin{itemize}
+    \item $d$ : coût des modifications (nombre de littéraux changés, ou distance en espace continu reconstruit).
+    \item Terme sparse : favorise des règles \textbf{courtes}, plus simples à auditer.
+\end{itemize}
+
+\end{frame}
+
+\begin{frame}
+\frametitle{Évaluation et lecture des politiques}
+\framesubtitle{Contrefactuels et règles}
+
+\begin{itemize}
+    \item \textbf{Qualité des contrefactuels} : taux de validité $\mathbb{P}(\arg\max z(x'_c) = c)$, parcimonie moyenne $\mathbb{E}[\|x - x'\|_0]$, proximité $\mathbb{E}[\|x - x'\|_1]$ après reconstruction.
+    \item \textbf{Lecture des règles} : pour chaque $k$, extraire les indices $j$ avec $|w_{k,j}|$ notable et lire le littéral actif ($+1$ ou $-1$) comme condition ; $U$ indique la classe dominante de la règle.
+\end{itemize}
+
+\vspace{0.4cm}
+\begin{center}
+\textbf{But DLBAC} : précision élevée, règles inspectables, contrefactuels \textbf{plausibles} et \textbf{peu coûteux} pour l'utilisateur.
+\end{center}
+
+\end{frame}
+
+\end{document}

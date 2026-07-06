@@ -1,0 +1,140 @@
+// =============================================================================
+// Architecture detaillee - module nouveau_module (HybridDRNetModel)
+// Graphviz (DOT). Pas de labels HTML <<...>> : le caractere '>' dans </B> casse le parseur.
+// Rendu :
+//   dot -Tsvg  docs/nouveau_module_architecture.dot -o docs/nouveau_module_architecture.svg
+//   dot -Tpng  docs/nouveau_module_architecture.dot -o docs/nouveau_module_architecture.png
+// Vue horizontale (rankdir=LR) : voir nouveau_module_architecture_horizontal.dot
+// Vue simplifiee (FR) : voir nouveau_module_architecture_simplifie_fr.dot
+// Variante schema FR avec hyper MLP : nouveau_module_architecture_simplifie_fr_hyper_mlp.dot
+// =============================================================================
+
+digraph nouveau_module_architecture {
+    graph [
+        rankdir=TB
+        splines=ortho
+        compound=true
+        nodesep=0.5
+        ranksep=0.6
+        fontname="Helvetica"
+        fontsize=11
+        label="Architecture HybridDRNet - nouveau_module (HyConEx_from_scratch)\nContinu -> binarisation +/-1 -> Hyper TabResNet -> regles HyperLogic + tete CF"
+        labelloc=t
+    ]
+    node [
+        fontname="Helvetica"
+        fontsize=10
+        shape=box
+        style="rounded,filled"
+        fillcolor="#f7f7f7"
+    ]
+    edge [fontname="Helvetica" fontsize=9 color="#333333"]
+
+    subgraph cluster_bin {
+        label="TabularBinarizer (binarizer.py)"
+        labelloc=b
+        style=dashed
+        color="#555555"
+
+        X_cont [shape=cylinder label="X_cont\nnumpy float32 [B, n_feat]" fillcolor="#e3f2fd"]
+        X_bin  [shape=cylinder label="x_bin\ntorch [B, D_b] dans {-1,+1}\nbins quantiles + bipolar" fillcolor="#e8f5e9"]
+        X_cont -> X_bin [label="fit/transform"]
+    }
+
+    subgraph cluster_hyper {
+        label="HyperWeightGenerator (hypernet.py)"
+        color="#ef6c00"
+        style=filled
+        fillcolor="#fff8e1"
+
+        subgraph cluster_tab {
+            label="TabResNetBackbone"
+            color="#e65100"
+            style=filled
+            fillcolor="#fff3e0"
+
+            STEM   [label="Stem\nLinear(D_b->H) + LayerNorm + ReLU"]
+            BLOCKS [label="ResidualBlock x n_blocks\n2x(Linear+LN)+Dropout + skip + ReLU"]
+            STEM -> BLOCKS
+        }
+
+        POOL [label="Pooling batch\nz = TabResNet(x_bin)  [B,H]\nh = mean(z, dim=0)  [H]" fillcolor="#fce4ec"]
+
+        MAIN_HEAD [label="main_head\nLinear(H -> |theta_main|)" fillcolor="#e0f7fa"]
+        CF_HEAD   [label="cf_head\nLinear(H -> |theta_cf|)" fillcolor="#e0f7fa"]
+
+        BLOCKS -> POOL
+        POOL -> MAIN_HEAD [label="theta_main"]
+        POOL -> CF_HEAD   [label="theta_cf"]
+    }
+
+    X_bin -> STEM [ltail=cluster_bin lhead=cluster_tab label="forward"]
+
+    subgraph cluster_main {
+        label="Tete regles - main_logits_from_weights (main_rule_net.py)"
+        color="#2e7d32"
+        style=filled
+        fillcolor="#e8f5e9"
+
+        UNPACK_M [label="unpack_main_params\nW_rule [D_b x K], b_rule [K]\nW_out [K x C], b_out [C]"]
+        U_NODE   [label="u (par regle k)\nx_bin @ W_rule - sum|W_rule| + b_rule" fillcolor="#fffde7"]
+        GATE     [label="Porte lisse HyperLogic\no = exp(-u^2 / tau)" fillcolor="#fffde7"]
+        LOGITS   [shape=cylinder label="logits\nz = o @ W_out + b_out  [B,C]" fillcolor="#e3f2fd"]
+        RULE_ACT [shape=note fillcolor="#fff9c4" label="ForwardOutputs\nrule_activations = o  [B,K]"]
+
+        UNPACK_M -> U_NODE -> GATE -> LOGITS
+        GATE -> RULE_ACT [style=dashed]
+    }
+
+    MAIN_HEAD -> UNPACK_M [ltail=cluster_hyper lhead=cluster_main label="theta_main" style=bold]
+
+    subgraph cluster_cf {
+        label="Tete CF - generate_cf_binary (cf_head.py)"
+        color="#6a1b9a"
+        style=filled
+        fillcolor="#f3e5f5"
+
+        Y_TGT [shape=cylinder label="y_target [B]" fillcolor="#ede7f6"]
+        UNPACK_C [label="unpack_cf_params\nW1,b1,W2,b2 (MLP 2 couches)"]
+        CONCAT [label="Concat\n[x_bin | onehot(y_target)]  [B, D_b+C]"]
+        MLP_CF [label="MLP\nReLU(inp W1+b1) ; h W2+b2"]
+        SIGM   [label="p = sigmoide(logits)\nP(bit = +1)"]
+        ST     [label="Straight-through\nsortie dans {-1,+1}"]
+        X_CF   [shape=cylinder label="x_cf_bin [B, D_b]" fillcolor="#e8f5e9"]
+
+        UNPACK_C -> CONCAT
+        Y_TGT -> CONCAT [label="one-hot"]
+        CONCAT -> MLP_CF -> SIGM -> ST -> X_CF
+    }
+
+    CF_HEAD -> UNPACK_C [ltail=cluster_hyper lhead=cluster_cf label="theta_cf" style=bold]
+    X_bin -> CONCAT [ltail=cluster_bin lhead=cluster_cf label="x_bin"]
+
+    subgraph cluster_eval_cf {
+        label="Evaluation CF (model.py)"
+        style=dashed
+        color="#455a64"
+
+        CF_LOGITS [shape=cylinder label="logits_cf\n[B, C]" fillcolor="#e3f2fd"]
+        EVAL_NOTE [shape=note fillcolor="#eceff1" label="Meme chaine regles\nmain_logits_from_weights(\nx_cf_bin, theta_main, ...)"]
+
+        EVAL_NOTE -> CF_LOGITS
+    }
+
+    X_CF -> EVAL_NOTE [ltail=cluster_cf lhead=cluster_eval_cf label="x_cf"]
+    UNPACK_M -> EVAL_NOTE [ltail=cluster_main lhead=cluster_eval_cf style=dashed color="#757575" label="theta_main\n(reutilise)"]
+
+    subgraph cluster_loss {
+        label="HybridDRTrainer - pertes (trainer.py)"
+        style=dashed
+        color="#37474f"
+
+        L1 [shape=note fillcolor="#eceff1" label="CE(logits, y)"]
+        L2 [shape=note fillcolor="#eceff1" label="CE_cf multi-cibles"]
+        L3 [shape=note fillcolor="#eceff1" label="flip_lambda x (# bits changes)"]
+        L4 [shape=note fillcolor="#eceff1" label="sparsite |W_rule|"]
+    }
+
+    LOGITS -> L1 [style=dotted]
+    CF_LOGITS -> L2 [style=dotted]
+}

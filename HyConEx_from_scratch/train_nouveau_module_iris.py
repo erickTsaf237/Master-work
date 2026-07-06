@@ -1,4 +1,4 @@
-﻿"""Exemple minimal: entraînement Iris avec le nouveau module DR-HyperCF binaire."""
+"""Exemple minimal: entraînement Iris avec le nouveau module DR-HyperCF binaire."""
 
 from __future__ import annotations
 
@@ -32,8 +32,9 @@ def main() -> None:
         batch_size=16,
         num_rules=24,
         bins_per_feature=4,
-        cf_lambda=0.3,
-        flip_lambda=0.08,
+        temperature=0.8,
+        cf_lambda=0.15,
+        flip_lambda=0.06,
     )
     trainer = HybridDRTrainer(cfg)
     result = trainer.fit(

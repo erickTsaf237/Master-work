@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import numpy as np
 
@@ -22,8 +22,9 @@ def main() -> None:
         lr=1e-3,
         num_rules=64,
         bins_per_feature=4,
-        cf_lambda=0.30,
-        flip_lambda=0.08,
+        temperature=0.8,
+        cf_lambda=0.15,
+        flip_lambda=0.06,
         rule_sparsity_lambda=0.002,
     )
 
